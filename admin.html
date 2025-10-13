@@ -23,22 +23,56 @@
   <p id="status"></p>
 
   <script>
-    async function saveConfig() {
-      const password = document.getElementById('password').value;
-      const markerName = document.getElementById('markerName').value;
-      const mediaType = document.getElementById('mediaType').value;
-      const mediaUrl = document.getElementById('mediaUrl').value;
+  const ADMIN_PASSWORD = "123";
+  const GIST_ID = "de164ff34fad007099e8bf2668ae1d61"; //  REPLACE with your Gist ID
+  const GITHUB_TOKEN = "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"; //  REPLACE with your token
 
-      const response = await fetch('/.netlify/functions/config', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ password, markerName, mediaType, mediaUrl })
-      });
-
-      const result = await response.json();
-      document.getElementById('status').innerText = 
-        response.ok ? '✅ Saved!' : '❌ ' + (result.message || 'Error');
+  function login() {
+    if (document.getElementById('password').value === ADMIN_PASSWORD) {
+      document.getElementById('adminForm').classList.remove('secret');
+    } else {
+      alert("Incorrect password!");
     }
-  </script>
+  }
+
+  async function saveConfig() {
+    const markerName = document.getElementById('markerName').value;
+    const mediaType = document.getElementById('mediaType').value;
+    const mediaUrl = document.getElementById('mediaUrl').value;
+
+    if (!mediaUrl) {
+      alert("Please enter a URL");
+      return;
+    }
+
+    const config = {
+      markerName: markerName,
+      mediaType: mediaType,
+      mediaUrl: mediaUrl
+    };
+
+    // Update Gist
+    const response = await fetch(`https://api.github.com/gists/${GIST_ID}`, {
+      method: 'PATCH',
+      headers: {
+        'Authorization': `token ${GITHUB_TOKEN}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        files: {
+          "ar-config.json": {
+            content: JSON.stringify(config, null, 2)
+          }
+        }
+      })
+    });
+
+    if (response.ok) {
+      document.getElementById('status').innerText = "✅ Saved! Refresh the AR page.";
+    } else {
+      document.getElementById('status').innerText = "❌ Error: " + (await response.text());
+    }
+  }
+</script>
 </body>
 </html>
