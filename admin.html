@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>AR Admin</title>
+  <style>
+    body { font-family: sans-serif; max-width: 600px; margin: 40px auto; }
+    input, select, button { padding: 10px; margin: 10px 0; width: 100%; }
+    #status { color: green; }
+  </style>
+</head>
+<body>
+  <h1>AR Content Admin</h1>
+  
+  <input type="password" id="password" placeholder="Admin password">
+  <label>Custom Marker Name (without .fset):</label>
+  <input type="text" id="markerName" value="my-logo" placeholder="e.g., my-logo">
+  <select id="mediaType">
+    <option value="image">Image</option>
+    <option value="video">Video</option>
+  </select>
+  <input type="url" id="mediaUrl" placeholder="Public URL (e.g., .jpg, .mp4)">
+  <button onclick="saveConfig()">Save</button>
+  <p id="status"></p>
+
+  <script>
+    async function saveConfig() {
+      const password = document.getElementById('password').value;
+      const markerName = document.getElementById('markerName').value;
+      const mediaType = document.getElementById('mediaType').value;
+      const mediaUrl = document.getElementById('mediaUrl').value;
+
+      const response = await fetch('/.netlify/functions/config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password, markerName, mediaType, mediaUrl })
+      });
+
+      const result = await response.json();
+      document.getElementById('status').innerText = 
+        response.ok ? '✅ Saved!' : '❌ ' + (result.message || 'Error');
+    }
+  </script>
+</body>
+</html>
