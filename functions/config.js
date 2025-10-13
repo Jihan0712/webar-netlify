@@ -6,9 +6,9 @@ const CONFIG_FILE = path.join(__dirname, '..', 'config.json');
 
 // Default config
 const DEFAULT_CONFIG = {
-  markerName: 'my-logo', // 👈 Name of your marker files (without .fset)
+  markerName: 'my-logo',
   mediaType: 'image',
-  mediaUrl: 'https://ar-js-org.github.io/AR.js/aframe/examples/image-tracking/nft/hirondelle.png'
+  mediaUrl: 'https://imgur.com/a/KZjv7Oa.png'
 };
 
 // Ensure config file exists
@@ -50,6 +50,12 @@ exports.handler = async (event) => {
         mediaType: body.mediaType || 'image',
         mediaUrl: body.mediaUrl || ''
       };
+
+      // Validate mediaUrl
+      if (!newConfig.mediaUrl) {
+        return { statusCode: 400, body: 'Media URL is required' };
+      }
+
       await fs.writeFile(CONFIG_FILE, JSON.stringify(newConfig, null, 2));
 
       return {
@@ -61,6 +67,10 @@ exports.handler = async (event) => {
     return { statusCode: 405, body: 'Method not allowed' };
   } catch (error) {
     console.error('Error:', error);
-    return { statusCode: 500, body: 'Server error' };
+    return {
+      statusCode: 500,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ error: 'Server error', details: error.message })
+    };
   }
 };
