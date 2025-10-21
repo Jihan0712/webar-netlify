@@ -1,78 +1,267 @@
 <!DOCTYPE html>
-<html>
-<head>
-  <title>AR Admin</title>
-  <style>
-    body { font-family: sans-serif; max-width: 600px; margin: 40px auto; }
-    input, select, button { padding: 10px; margin: 10px 0; width: 100%; }
-    #status { color: green; }
-  </style>
-</head>
-<body>
-  <h1>AR Content Admin</h1>
-  
-  <input type="password" id="password" placeholder="Admin password">
-  <label>Custom Marker Name (without .fset):</label>
-  <input type="text" id="markerName" value="my-logo" placeholder="e.g., my-logo">
-  <select id="mediaType">
-    <option value="image">Image</option>
-    <option value="video">Video</option>
-  </select>
-  <input type="url" id="mediaUrl" placeholder="Public URL (e.g., .jpg, .mp4)">
-  <button onclick="saveConfig()">Save</button>
-  <p id="status"></p>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>INRL AR Admin Dashboard</title>
 
-  <script>
-  const ADMIN_PASSWORD = "123";
-  const GIST_ID = "de164ff34fad007099e8bf2668ae1d61"; //  REPLACE with your Gist ID
-  const GITHUB_TOKEN = "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"; //  REPLACE with your token
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Supabase JS -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  </head>
+  <body class="bg-gray-100 text-gray-800 font-sans">
+    <div class="flex min-h-screen">
+      <!-- Sidebar -->
+      <aside class="w-64 bg-gray-900 text-white flex flex-col p-6">
+        <h1 class="text-2xl font-bold mb-8 text-center">INRL AR</h1>
+        <nav class="flex flex-col space-y-3">
+          <button id="uploadTab" class="py-2 px-3 rounded bg-blue-600 hover:bg-blue-700 text-left">Upload Target</button>
+          <button id="listTab" class="py-2 px-3 rounded hover:bg-gray-700 text-left">Existing Targets</button>
+        </nav>
+        <footer class="mt-auto text-xs text-gray-400 pt-4 border-t border-gray-700">
+          &copy; 2025 INRL
+        </footer>
+      </aside>
 
-  function login() {
-    if (document.getElementById('password').value === ADMIN_PASSWORD) {
-      document.getElementById('adminForm').classList.remove('secret');
-    } else {
-      alert("Incorrect password!");
-    }
-  }
+      <!-- Main content -->
+      <main class="flex-1 p-8">
+        <p id="status" class="mb-4 text-sm text-gray-600"></p>
 
-  async function saveConfig() {
-    const markerName = document.getElementById('markerName').value;
-    const mediaType = document.getElementById('mediaType').value;
-    const mediaUrl = document.getElementById('mediaUrl').value;
+        <!-- Upload Section -->
+        <section id="uploadSection">
+          <h2 class="text-xl font-semibold mb-4">Upload a New AR Target</h2>
+          <div class="bg-white shadow rounded-lg p-6 space-y-4">
+            <div>
+              <label class="block text-sm font-medium mb-1">Target Name</label>
+              <input id="name" type="text" placeholder="Target name"
+                class="w-full border-gray-300 rounded-lg p-2 focus:ring-2 focus:ring-blue-500 outline-none" />
+            </div>
 
-    if (!mediaUrl) {
-      alert("Please enter a URL");
-      return;
-    }
+            <div>
+              <label class="block text-sm font-medium mb-1">Marker Image (.jpg/.png)</label>
+              <div class="flex gap-2">
+                <input id="markerFile" type="file" accept=".jpg,.jpeg,.png" class="flex-1 border p-2 rounded-md" />
+                <button id="generateMindFile" class="bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700 transition">
+                  Generate .mind
+                </button>
+              </div>
+              <p id="compileStatus" class="text-sm text-gray-500 mt-1"></p>
+            </div>
 
-    const config = {
-      markerName: markerName,
-      mediaType: mediaType,
-      mediaUrl: mediaUrl
-    };
+            <div>
+              <label class="block text-sm font-medium mb-1">.mind File</label>
+              <input id="mindFile" type="file" accept=".mind" class="w-full" />
+            </div>
 
-    // Update Gist
-    const response = await fetch(`https://api.github.com/gists/${de164ff34fad007099e8bf2668ae1d61}`, {
-      method: 'PATCH',
-      headers: {
-        'Authorization': `token ${GITHUB_TOKEN}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        files: {
-          "ar-config.json": {
-            content: JSON.stringify(config, null, 2)
-          }
+            <div>
+              <label class="block text-sm font-medium mb-1">.mp4 Video</label>
+              <input id="videoFile" type="file" accept="video/mp4" class="w-full" />
+            </div>
+
+            <button id="upload" class="bg-blue-600 text-white px-5 py-2 rounded-lg hover:bg-blue-700">
+              Upload
+            </button>
+          </div>
+        </section>
+
+        <!-- List Section -->
+        <section id="listSection" class="hidden">
+          <h2 class="text-xl font-semibold mb-4">Existing Targets</h2>
+          <div id="targetsList" class="bg-white shadow rounded-lg overflow-hidden">
+            <table class="w-full text-left border-collapse">
+              <thead class="bg-gray-200">
+                <tr>
+                  <th class="p-3">Name</th>
+                  <th class="p-3">Created</th>
+                  <th class="p-3">Active</th>
+                  <th class="p-3 text-center">Actions</th>
+                </tr>
+              </thead>
+              <tbody id="targetsTable"></tbody>
+            </table>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <!-- MindAR Compiler Integration -->
+    <script type="module">
+      import { Compiler } from './dist/mindar-image-compiler.prod.js';
+
+      const SUPABASE_URL = "https://vleqrpqfjkcazeowczjy.supabase.co";
+      const SUPABASE_ANON_KEY = "sb_publishable_yB6MBOTVLquZgR4X6yqhTQ_0wBFkhrZ";
+      const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+      const uploadBtn = document.getElementById("upload");
+      const statusEl = document.getElementById("status");
+      const uploadSection = document.getElementById("uploadSection");
+      const listSection = document.getElementById("listSection");
+      const uploadTab = document.getElementById("uploadTab");
+      const listTab = document.getElementById("listTab");
+      const targetsTable = document.getElementById("targetsTable");
+      const compileStatus = document.getElementById("compileStatus");
+
+      uploadTab.addEventListener("click", () => {
+        uploadSection.classList.remove("hidden");
+        listSection.classList.add("hidden");
+        uploadTab.classList.add("bg-blue-600");
+        listTab.classList.remove("bg-blue-600");
+      });
+
+      listTab.addEventListener("click", () => {
+        listSection.classList.remove("hidden");
+        uploadSection.classList.add("hidden");
+        listTab.classList.add("bg-blue-600");
+        uploadTab.classList.remove("bg-blue-600");
+        loadTargets();
+      });
+
+      // 🧠 Generate .mind file from image
+      document.getElementById("generateMindFile").addEventListener("click", async () => {
+        const markerFile = document.getElementById("markerFile").files[0];
+        if (!markerFile) {
+          compileStatus.textContent = "⚠️ Please select an image file first.";
+          return;
         }
-      })
-    });
 
-    if (response.ok) {
-      document.getElementById('status').innerText = "✅ Saved! Refresh the AR page.";
-    } else {
-      document.getElementById('status').innerText = "❌ Error: " + (await response.text());
-    }
-  }
-</script>
-</body>
+        compileStatus.textContent = "🧠 Generating .mind file... Please wait.";
+
+        try {
+          const img = new Image();
+          img.src = URL.createObjectURL(markerFile);
+          await img.decode();
+
+          const compiler = new Compiler();
+          const result = await compiler.compileImageTargets([img]);
+          const mindData = result.exportData();
+
+          const blob = new Blob([mindData], { type: "application/octet-stream" });
+          const a = document.createElement("a");
+          a.href = URL.createObjectURL(blob);
+          a.download = `${markerFile.name.replace(/\.[^/.]+$/, "")}.mind`;
+          a.click();
+
+          compileStatus.textContent = "✅ .mind file generated successfully!";
+        } catch (err) {
+          console.error(err);
+          compileStatus.textContent = "❌ Failed to generate .mind file: " + err.message;
+        }
+      });
+
+      // 📤 Upload Mind + Video + DB Entry
+      uploadBtn.addEventListener("click", async () => {
+        const name = document.getElementById("name").value.trim();
+        const mind = document.getElementById("mindFile").files[0];
+        const video = document.getElementById("videoFile").files[0];
+
+        if (!name || !mind || !video) {
+          alert("⚠️ Please fill all fields and upload required files.");
+          return;
+        }
+
+        statusEl.textContent = "⏳ Uploading files...";
+        const timestamp = Date.now();
+        const mindPath = `minds/${timestamp}-${mind.name}`;
+        const videoPath = `videos/${timestamp}-${video.name}`;
+
+        const { error: mindErr } = await supabase.storage.from("assets").upload(mindPath, mind);
+        if (mindErr) return (statusEl.textContent = "❌ Mind upload failed: " + mindErr.message);
+
+        const { error: vidErr } = await supabase.storage.from("assets").upload(videoPath, video);
+        if (vidErr) return (statusEl.textContent = "❌ Video upload failed: " + vidErr.message);
+
+        const mindUrl = supabase.storage.from("assets").getPublicUrl(mindPath).data.publicUrl;
+        const videoUrl = supabase.storage.from("assets").getPublicUrl(videoPath).data.publicUrl;
+
+        const { error: dbErr } = await supabase
+          .from("targets")
+          .insert([{ name, mindUrl, videoUrl, is_active: false }]);
+
+        if (dbErr) return (statusEl.textContent = "❌ Database insert failed: " + dbErr.message);
+
+        statusEl.textContent = "✅ Upload complete!";
+        document.getElementById("name").value = "";
+        document.getElementById("mindFile").value = "";
+        document.getElementById("videoFile").value = "";
+        loadTargets();
+      });
+
+      async function loadTargets() {
+        const { data, error } = await supabase
+          .from("targets")
+          .select("*")
+          .order("created_at", { ascending: false });
+        if (error) return console.error("Error loading targets:", error);
+
+        targetsTable.innerHTML = "";
+        data.forEach((t) => {
+          const isActive = t.is_active ? "✅" : "❌";
+          const activeClass = t.is_active ? "bg-green-50 border-l-4 border-green-500" : "";
+          const row = `
+            <tr class="${activeClass}">
+              <td class="p-3">${t.name}</td>
+              <td class="p-3 text-gray-500">${new Date(t.created_at).toLocaleString()}</td>
+              <td class="p-3">${isActive}</td>
+              <td class="p-3 text-center space-x-2">
+                <button onclick="setActive('${t.id}')" class="px-3 py-1 rounded bg-blue-500 text-white hover:bg-blue-600">Set Active</button>
+                <button onclick="editVideo('${t.id}', '${t.name}')" class="px-3 py-1 rounded bg-yellow-500 text-white hover:bg-yellow-600">Edit</button>
+                <button onclick="deleteTarget('${t.id}', '${t.name}', '${t.mindUrl}', '${t.videoUrl}')" class="px-3 py-1 rounded bg-red-500 text-white hover:bg-red-600">Delete</button>
+              </td>
+            </tr>`;
+          targetsTable.innerHTML += row;
+        });
+      }
+
+      window.setActive = async (targetId) => {
+        statusEl.textContent = "⏳ Updating active target...";
+        await supabase.from("targets").update({ is_active: false }).neq("id", targetId);
+        const { error } = await supabase.from("targets").update({ is_active: true }).eq("id", targetId);
+        statusEl.textContent = error ? "❌ Error: " + error.message : "✅ Active target updated!";
+        loadTargets();
+      };
+
+      window.editVideo = async (id, name) => {
+        const input = document.createElement("input");
+        input.type = "file";
+        input.accept = "video/mp4";
+        input.click();
+
+        input.onchange = async () => {
+          const file = input.files[0];
+          if (!file) return;
+          statusEl.textContent = "⏳ Uploading new video...";
+          const timestamp = Date.now();
+          const videoPath = `videos/${timestamp}-${file.name}`;
+
+          const { error: vidErr } = await supabase.storage.from("assets").upload(videoPath, file);
+          if (vidErr) return (statusEl.textContent = "❌ Upload failed: " + vidErr.message);
+
+          const videoUrl = supabase.storage.from("assets").getPublicUrl(videoPath).data.publicUrl;
+          const { error: updateErr } = await supabase.from("targets").update({ videoUrl }).eq("id", id);
+          statusEl.textContent = updateErr ? "❌ Update failed: " + updateErr.message : "✅ Video updated!";
+          loadTargets();
+        };
+      };
+
+      window.deleteTarget = async (id, name, mindUrl, videoUrl) => {
+        const confirm1 = confirm(`⚠️ Are you sure you want to delete "${name}"?`);
+        if (!confirm1) return;
+        const confirm2 = prompt('Type "delete" to confirm this action:');
+        if (confirm2?.toLowerCase() !== "delete") return alert("❌ Deletion cancelled.");
+
+        statusEl.textContent = "⏳ Deleting target...";
+        const { error: delErr } = await supabase.from("targets").delete().eq("id", id);
+        if (delErr) return (statusEl.textContent = "❌ Failed: " + delErr.message);
+
+        const mindPath = mindUrl.split("/").slice(-2).join("/");
+        const videoPath = videoUrl.split("/").slice(-2).join("/");
+        await supabase.storage.from("assets").remove([mindPath, videoPath]);
+        statusEl.textContent = "✅ Target deleted successfully!";
+        loadTargets();
+      };
+
+      loadTargets();
+    </script>
+  </body>
 </html>

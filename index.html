@@ -1,73 +1,257 @@
 <!DOCTYPE html>
-<html>
-<head>
-  <meta charset="utf-8">
-  <title>WebAR Experience</title>
-  <script src="https://aframe.io/releases/1.4.0/aframe.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/gh/AR-js-org/AR.js/aframe/build/aframe-ar-nft.min.js"></script>
-  <style>
-    .loading { position: fixed; top: 0; width: 100%; text-align: center; background: black; color: white; z-index: 9999; }
-  </style>
-</head>
-<body style="margin: 0; overflow: hidden;">
-  <div class="loading" id="loader">Loading AR...</div>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>INRL AR Viewer (Stabilized)</title>
 
-  <a-scene 
-    arjs="sourceType: webcam; debugUIEnabled: false;" 
-    renderer="logarithmicDepthBuffer: true;"
-    vr-mode-ui="enabled: false"
-    id="scene"
-    style="display: none;"
-  >
-    <!-- Dynamic NFT marker will be inserted here -->
-  </a-scene>
+    <!-- A-Frame + MindAR -->
+    <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
 
-  <script>
-  const GIST_ID = "de164ff34fad007099e8bf2668ae1d61"; // 👈 Your Gist ID
-
-  fetch(`https://gist.githubusercontent.com/Jihan0712/${GIST_ID}/raw/ar-config.json`)
-    .then(response => response.json())
-    .then(config => {
-      const scene = document.getElementById('scene');
-      const markerName = config.markerName || 'my-logo';
-      const mediaType = config.mediaType || 'image';
-      const mediaUrl = config.mediaUrl || '';
-
-      // Create NFT marker
-      const nft = document.createElement('a-nft');
-      nft.setAttribute('type', 'nft');
-      nft.setAttribute('url', markerName); // This loads markerName.fset, .fset3, .jpg
-      nft.setAttribute('smooth', 'true');
-      nft.setAttribute('smoothCount', '10');
-      nft.setAttribute('smoothTolerance', '0.01');
-      nft.setAttribute('smoothThreshold', '5');
-
-      // Add media content
-      if (mediaType === 'image') {
-        const img = document.createElement('a-image');
-        img.setAttribute('src', mediaUrl);
-        img.setAttribute('position', '0 0 0');
-        img.setAttribute('scale', '1 1 1');
-        nft.appendChild(img);
-      } else if (mediaType === 'video') {
-        const video = document.createElement('a-video');
-        video.setAttribute('src', mediaUrl);
-        video.setAttribute('position', '0 0 0');
-        video.setAttribute('scale', '1.6 0.9 1');
-        video.setAttribute('autoplay', 'true');
-        video.setAttribute('loop', 'true');
-        nft.appendChild(video);
+    <style>
+      /* 👇 Added: Tap-to-Start overlay */
+      #start-screen {
+        position: fixed;
+        inset: 0;
+        background: linear-gradient(135deg, #0f172a, #1e293b);
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        color: white;
+        font-family: "Poppins", sans-serif;
+        z-index: 9999;
+        cursor: pointer;
+        text-align: center;
+        transition: opacity 0.5s ease;
       }
 
-      scene.appendChild(nft);
+      #start-screen.hidden {
+        opacity: 0;
+        pointer-events: none;
+      }
 
-      document.getElementById('loader').style.display = 'none';
-      scene.style.display = 'block';
-    })
-    .catch(err => {
-      console.error("Failed to load config", err);
-      document.getElementById('loader').innerText = "Error loading AR content.";
-    });
-</script>
-</body>
+      #start-screen h1 {
+        font-size: 2rem;
+        margin-bottom: 0.5rem;
+        animation: pulse 1.5s infinite;
+      }
+
+      #start-screen p {
+        font-size: 1.1rem;
+        opacity: 0.8;
+      }
+
+      @keyframes pulse {
+        0% { transform: scale(1); opacity: 1; }
+        50% { transform: scale(1.1); opacity: 0.8; }
+        100% { transform: scale(1); opacity: 1; }
+      }
+    </style>
+
+    <!-- Supabase Client -->
+    <script type="module">
+      import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+
+      const SUPABASE_URL = "https://vleqrpqfjkcazeowczjy.supabase.co";
+      const SUPABASE_ANON_KEY = "sb_publishable_yB6MBOTVLquZgR4X6yqhTQ_0wBFkhrZ";
+      const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+      async function loadActiveTarget() {
+        console.log("📡 Loading active target from Supabase...");
+        const { data, error } = await supabase
+          .from("targets")
+          .select("*")
+          .eq("is_active", true)
+          .single();
+
+        if (error || !data) {
+          console.error("❌ No active target found:", error);
+          document.body.innerHTML =
+            "<h2 style='text-align:center; color:red;'>❌ No active target found in database.</h2>";
+          return null;
+        }
+
+        console.log("✅ Active target loaded:", data);
+        return data;
+      }
+
+      document.addEventListener("DOMContentLoaded", async () => {
+        const activeTarget = await loadActiveTarget();
+        if (!activeTarget) return;
+
+        const mindUrl = activeTarget.mindUrl;
+        const videoUrl = activeTarget.videoUrl;
+
+        const scene = document.querySelector("a-scene");
+        const aframeVideoAsset = document.querySelector("#card");
+        const planeEl = document.querySelector("#video-plane");
+        const target = document.querySelector("#target");
+
+        scene.setAttribute("mindar-image", `imageTargetSrc: ${mindUrl};`);
+
+        aframeVideoAsset.crossOrigin = "anonymous";
+        aframeVideoAsset.src = videoUrl;
+        aframeVideoAsset.loop = true;
+        aframeVideoAsset.muted = true;
+        aframeVideoAsset.playsInline = true;
+        aframeVideoAsset.preload = "auto";
+
+        // Wait until mesh is ready
+        function whenPlaneMeshReady(cb) {
+          const mesh = planeEl.getObject3D && planeEl.getObject3D("mesh");
+          if (mesh) return cb(mesh);
+          planeEl.addEventListener("model-loaded", () => cb(planeEl.getObject3D("mesh")));
+          let tries = 0;
+          const iv = setInterval(() => {
+            const m = planeEl.getObject3D && planeEl.getObject3D("mesh");
+            if (m) {
+              clearInterval(iv);
+              cb(m);
+            } else if (++tries > 20) {
+              clearInterval(iv);
+              console.warn("Could not find plane mesh.");
+            }
+          }, 100);
+        }
+
+        // Draw video into square canvas texture
+        whenPlaneMeshReady((mesh) => {
+          planeEl.setAttribute("width", 1);
+          planeEl.setAttribute("height", 1);
+
+          const CANVAS_SIZE = 1024;
+          const canvas = document.createElement("canvas");
+          canvas.width = CANVAS_SIZE;
+          canvas.height = CANVAS_SIZE;
+          const ctx = canvas.getContext("2d");
+
+          const texture = new THREE.CanvasTexture(canvas);
+          texture.minFilter = THREE.LinearFilter;
+          texture.magFilter = THREE.LinearFilter;
+          texture.format = THREE.RGBAFormat;
+
+          if (Array.isArray(mesh.material)) {
+            mesh.material.forEach((m) => {
+              m.map = texture;
+              m.needsUpdate = true;
+            });
+          } else {
+            mesh.material.map = texture;
+            mesh.material.needsUpdate = true;
+          }
+
+          function startDrawLoop() {
+            const vw = aframeVideoAsset.videoWidth;
+            const vh = aframeVideoAsset.videoHeight;
+            if (!vw || !vh) {
+              requestAnimationFrame(startDrawLoop);
+              return;
+            }
+
+            const videoAspect = vw / vh;
+            const canvasSize = CANVAS_SIZE;
+            let drawW, drawH, offsetX, offsetY;
+
+            if (videoAspect > 1) {
+              drawW = canvasSize;
+              drawH = canvasSize / videoAspect;
+              offsetX = 0;
+              offsetY = Math.round((canvasSize - drawH) / 2);
+            } else {
+              drawH = canvasSize;
+              drawW = Math.round(canvasSize * videoAspect);
+              offsetX = Math.round((canvasSize - drawW) / 2);
+              offsetY = 0;
+            }
+
+            (function drawFrame() {
+              ctx.fillStyle = "black";
+              ctx.fillRect(0, 0, canvasSize, canvasSize);
+              try {
+                ctx.drawImage(aframeVideoAsset, offsetX, offsetY, drawW, drawH);
+              } catch (e) {}
+              texture.needsUpdate = true;
+              requestAnimationFrame(drawFrame);
+            })();
+          }
+
+          if (aframeVideoAsset.readyState >= 1) startDrawLoop();
+          else aframeVideoAsset.addEventListener("loadedmetadata", startDrawLoop, { once: true });
+        });
+
+        // 🔊 Modified: trigger unmute + play via overlay
+        const startScreen = document.getElementById("start-screen");
+        startScreen.addEventListener("click", () => {
+          startScreen.classList.add("hidden");
+          aframeVideoAsset.muted = false;
+          aframeVideoAsset.play().catch((err) => console.warn("play blocked:", err));
+        }, { once: true });
+
+        // Stabilizer - smooth movement/rotation
+        const SMOOTHING_FACTOR = 0.05;
+        let lastPosition = new THREE.Vector3();
+        let lastRotation = new THREE.Euler();
+
+        scene.addEventListener("renderstart", () => {
+          const obj = target.object3D;
+          const tick = () => {
+            lastPosition.lerp(obj.position, SMOOTHING_FACTOR);
+            obj.position.copy(lastPosition);
+            lastRotation.x += (obj.rotation.x - lastRotation.x) * SMOOTHING_FACTOR;
+            lastRotation.y += (obj.rotation.y - lastRotation.y) * SMOOTHING_FACTOR;
+            lastRotation.z += (obj.rotation.z - lastRotation.z) * SMOOTHING_FACTOR;
+            obj.rotation.copy(lastRotation);
+            requestAnimationFrame(tick);
+          };
+          tick();
+        });
+
+        target.addEventListener("targetFound", () => {
+          console.log("🎯 Target found — play video");
+          aframeVideoAsset.play().catch((e) => console.warn("play error:", e));
+        });
+
+        target.addEventListener("targetLost", () => {
+          console.log("👀 Target lost — pause video");
+          aframeVideoAsset.pause();
+        });
+      });
+    </script>
+  </head>
+
+  <body>
+    <!-- 👇 Added: Tap-to-Start overlay -->
+    <div id="start-screen">
+      <h1>👆 Tap to Get Started</h1>
+      <p>Enable audio and begin your AR experience</p>
+    </div>
+
+    <a-scene
+      mindar-image="imageTargetSrc: ./placeholder.mind;"
+      color-space="sRGB"
+      renderer="colorManagement: true, physicallyCorrectLights"
+      vr-mode-ui="enabled: false"
+      device-orientation-permission-ui="enabled: false">
+
+      <a-assets>
+        <video id="card" preload="auto" crossorigin="anonymous" playsinline webkit-playsinline></video>
+      </a-assets>
+
+      <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
+
+      <a-entity id="target" mindar-image-target="targetIndex: 0">
+        <a-plane
+          id="video-plane"
+          src="#card"
+          position="0 0 0"
+          width="1"
+          height="1"
+          rotation="0 0 0"
+          material="shader: flat; transparent: true;">
+        </a-plane>
+      </a-entity>
+    </a-scene>
+  </body>
 </html>
