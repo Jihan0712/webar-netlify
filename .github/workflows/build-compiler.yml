@@ -1,56 +1,39 @@
-name: Build MindAR compiler
+name: Build MindAR Compiler
 
 on:
   workflow_dispatch:
   push:
-    branches:
-      - main
+    paths:
+      - "webar-backend/src/**"
+      - "admin.html"
 
 jobs:
   build:
     runs-on: ubuntu-latest
+
     steps:
-      - name: Checkout (with submodules)
+      - name: Checkout repo and submodules
         uses: actions/checkout@v4
         with:
           submodules: recursive
-          fetch-depth: 0
 
-      - name: Setup Node
+      - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: 22
 
-      - name: Install system deps for node-canvas
+      - name: Install dependencies
+        run: npm install --prefix webar-backend
+
+      - name: Build MindAR compiler
         run: |
-          sudo apt-get update
-          sudo apt-get install -y build-essential libcairo2-dev libjpeg-dev libpango1.0-dev libgif-dev librsvg2-dev
+          cd mind-ar-js
+          npm install
+          npm run build
 
-      - name: Install dependencies (in mind-ar-js)
-        working-directory: ./mind-ar-js
-        run: npm ci
-
-      - name: Build mind-ar-js
-        working-directory: ./mind-ar-js
-        run: npm run build
-
-      - name: Copy compiler artifact to root dist
-        run: |
-          mkdir -p dist
-          cp mind-ar-js/dist/mindar-image-compiler.prod.js dist/ || (echo "compiler not found" && exit 1)
-
-      - name: Upload artifact for debugging
-        uses: actions/upload-artifact@v4
-        with:
-          name: mindar-compiler-dist
-          path: dist/mindar-image-compiler.prod.js
-
-      - name: Commit dist back to repo (optional)
+      - name: Deploy to Supabase
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add dist/mindar-image-compiler.prod.js || echo "nothing to add"
-          git commit -m "ci: add built mindar-image-compiler.prod.js" || echo "no changes to commit"
-          git push origin HEAD:${{ github.ref_name }} || echo "push failed"
+          node webar-backend/src/mindCompiler.js
