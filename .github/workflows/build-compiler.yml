@@ -21,7 +21,7 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 22
-          
+
       - name: Install system dependencies for node-canvas
         run: |
           sudo apt-get update
