@@ -52,6 +52,7 @@
                 </div>
               </div>
               <p id="compileStatus" class="text-sm text-gray-500 mt-1"></p>
+              <p class="text-xs text-gray-400">Tip: large images will be resized to 1024px max to speed up compilation.</p>
             </div>
 
             <div>
@@ -91,11 +92,87 @@
     </div>
 
     <!-- MindAR Compiler Integration -->
-    <!-- TensorFlow.js is required by the in-browser compiler. Load it before importing MindAR/Compiler -->
-    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.16.0/dist/tf.min.js"></script>
     <script type="module">
-      // Load Compiler from CDN because local `mind-ar-js/dist` is not present in this repo
-      import { Compiler } from 'https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image.prod.js';
+      // We'll dynamically load TFJS (with fallbacks) and the Compiler (mind-ar) so the page
+      // can try multiple TF versions and avoid mismatches that cause minified runtime errors.
+      let Compiler = null;
+
+      function loadScript(url) {
+        return new Promise((resolve, reject) => {
+          const s = document.createElement('script');
+          s.src = url;
+          s.onload = () => resolve();
+          s.onerror = (e) => reject(new Error('Failed to load ' + url));
+          document.head.appendChild(s);
+        });
+      }
+
+      async function loadTfWithFallback() {
+        const versions = [
+          '4.16.0',
+          '4.8.0',
+          '4.20.0'
+        ];
+        let lastErr = null;
+        for (const v of versions) {
+          const url = `https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@${v}/dist/tf.min.js`;
+          try {
+            await loadScript(url);
+            // quick sanity check
+            if (typeof tf !== 'undefined' && tf?.version?.tfjs) {
+              console.log('Loaded tfjs', tf.version.tfjs);
+              return;
+            }
+            throw new Error('tf not available after loading ' + url);
+          } catch (err) {
+            console.warn('Failed to load tfjs', url, err.message);
+            lastErr = err;
+            // try next
+          }
+        }
+        throw lastErr || new Error('Failed to load any tfjs version');
+      }
+
+      // initialize TF and Compiler; other functions should await readyPromise
+      const readyPromise = (async () => {
+        await loadTfWithFallback();
+        try {
+          const mod = await import('https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image.prod.js');
+          Compiler = mod.Compiler;
+          console.log('Loaded Compiler from mind-ar');
+        } catch (err) {
+          console.error('Failed to import mind-ar Compiler', err);
+          throw err;
+        }
+      })();
+
+      // Resize image to reduce memory/compute for client-side compile
+      async function resizeImage(file, maxDim = 1024) {
+        const img = new Image();
+        img.src = URL.createObjectURL(file);
+        await img.decode();
+        let { width, height } = img;
+        if (width <= maxDim && height <= maxDim) {
+          // no resize needed; return original file
+          return file;
+        }
+        const aspect = width / height;
+        if (width > height) {
+          width = maxDim;
+          height = Math.round(maxDim / aspect);
+        } else {
+          height = maxDim;
+          width = Math.round(maxDim * aspect);
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, width, height);
+        return await new Promise((resolve) => canvas.toBlob((blob) => {
+          resolve(new File([blob], file.name, { type: 'image/jpeg' }));
+        }, 'image/jpeg', 0.9));
+      }
 
       const SUPABASE_URL = "https://vleqrpqfjkcazeowczjy.supabase.co";
       const SUPABASE_ANON_KEY = "sb_publishable_yB6MBOTVLquZgR4X6yqhTQ_0wBFkhrZ";
@@ -168,25 +245,38 @@
 
       // helper: compile a marker image file in-browser and return an ArrayBuffer
       async function compileImageClient(markerFile, progressCallback) {
+        // wait for TF and Compiler to be ready
+        await readyPromise;
+        // resize image to avoid memory blowups
+        const fileToUse = await resizeImage(markerFile, 1024);
         const img = new Image();
-        img.src = URL.createObjectURL(markerFile);
+        img.src = URL.createObjectURL(fileToUse);
         await img.decode();
 
         if (typeof tf === 'undefined') throw new Error('TensorFlow.js (tf) is not loaded.');
 
+        if (!Compiler) throw new Error('Compiler not loaded');
+
         const compiler = new Compiler();
         // mind-ar's compileImageTargets accepts a progress callback in some variants; we try to pass one
-        if (progressCallback) {
-          await compiler.compileImageTargets([img], progressCallback);
-        } else {
-          await compiler.compileImageTargets([img]);
+        try {
+          console.log('tf.version:', tf?.version?.tfjs || 'unknown');
+          if (progressCallback) {
+            await compiler.compileImageTargets([img], progressCallback);
+          } else {
+            await compiler.compileImageTargets([img]);
+          }
+        } catch (err) {
+          console.error('compileImageTargets threw', err);
+          if (typeof tf === 'undefined') console.error('tf is undefined at catch time');
+          throw err;
         }
         const buffer = compiler.exportData ? compiler.exportData() : null;
         if (!buffer) throw new Error('Failed to export compiled data');
         return buffer;
       }
 
-      // Server-side compile flow: send image to backend /compile which returns .mind binary
+      // "Server Compile" button: in Netlify setup we don't have a server compile endpoint, so perform client-side compile + upload instead.
       document.getElementById('serverCompile').addEventListener('click', async () => {
         const markerFile = document.getElementById('markerFile').files[0];
         if (!markerFile) {
@@ -194,38 +284,31 @@
           return;
         }
 
-        compileStatus.textContent = '🔧 Sending image to server for compilation...';
-
         try {
-          const form = new FormData();
-          form.append('image', markerFile);
-
-          // try localhost first, then relative path to backend. This helps when admin is served from same host.
-          let resp;
-          // Use relative path; when deployed configure BACKEND_URL if needed
-          resp = await fetch('/compile', { method: 'POST', body: form });
-
-          if (!resp.ok) throw new Error('Server compile failed: ' + resp.statusText);
-
-          const arrayBuffer = await resp.arrayBuffer();
-          const blob = new Blob([arrayBuffer], { type: 'application/octet-stream' });
-          const filename = markerFile.name.replace(/\.[^/.]+$/, '') + '.mind';
+          statusEl.textContent = '⏳ Compiling marker image in the browser (via "Server Compile" button)...';
+          const buffer = await compileImageClient(markerFile, (p) => {
+            compileStatus.textContent = `Progress: ${p.toFixed(1)}%`;
+          });
 
           compileStatus.textContent = '⬆️ Uploading compiled .mind to Supabase storage...';
-          const fileForUpload = new File([blob], filename, { type: 'application/octet-stream' });
+          const filename = markerFile.name.replace(/\.[^/.]+$/, '') + '.mind';
+          const fileForUpload = new File([buffer], filename, { type: 'application/octet-stream' });
           const timestamp = Date.now();
           const mindPath = `minds/${timestamp}-${filename}`;
           const { error: mindErr } = await supabase.storage.from('assets').upload(mindPath, fileForUpload);
           if (mindErr) throw mindErr;
 
           const mindUrl = supabase.storage.from('assets').getPublicUrl(mindPath).data.publicUrl;
-
-          // Store the server uploaded URL so upload handler can reuse it
           document.getElementById('mindFile').dataset.mindUrl = mindUrl;
           compileStatus.textContent = '✅ Compiled and uploaded to storage! Ready to Upload.';
+          statusEl.textContent = '';
         } catch (err) {
-          console.error(err);
-          compileStatus.textContent = '❌ Server compile failed: ' + (err.message || JSON.stringify(err));
+          // Provide richer debug info for the minified TypeError issue
+          console.error('Compile (serverCompile) failed', err);
+          const tfver = (typeof tf !== 'undefined' && tf?.version?.tfjs) ? tf.version.tfjs : 'tf not loaded';
+          compileStatus.textContent = `❌ Compile failed: ${err.message || err}. (tfjs: ${tfver})`;
+          // also show UA to help debugging
+          console.error('UserAgent:', navigator.userAgent);
         }
       });
 
