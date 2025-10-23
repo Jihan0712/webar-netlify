@@ -91,9 +91,11 @@
     </div>
 
     <!-- MindAR Compiler Integration -->
+    <!-- TensorFlow.js is required by the in-browser compiler. Load it before importing MindAR/Compiler -->
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.16.0/dist/tf.min.js"></script>
     <script type="module">
-  // Load Compiler from CDN because local `mind-ar-js/dist` is not present in this repo
-  import { Compiler } from 'https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image.prod.js';
+      // Load Compiler from CDN because local `mind-ar-js/dist` is not present in this repo
+      import { Compiler } from 'https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image.prod.js';
 
       const SUPABASE_URL = "https://vleqrpqfjkcazeowczjy.supabase.co";
       const SUPABASE_ANON_KEY = "sb_publishable_yB6MBOTVLquZgR4X6yqhTQ_0wBFkhrZ";
@@ -123,7 +125,7 @@
         loadTargets();
       });
 
-      // 🧠 Generate .mind file from image
+      // 🧠 Generate .mind file from image (client-side)
       document.getElementById("generateMindFile").addEventListener("click", async () => {
         const markerFile = document.getElementById("markerFile").files[0];
         if (!markerFile) {
@@ -138,9 +140,18 @@
           img.src = URL.createObjectURL(markerFile);
           await img.decode();
 
+          // Some versions expect tf to be available globally; ensure it's loaded
+          if (typeof tf === 'undefined') throw new Error('TensorFlow.js (tf) is not loaded. Make sure the tf.min.js script is available.');
+
           const compiler = new Compiler();
-          const result = await compiler.compileImageTargets([img]);
-          const mindData = result.exportData();
+          let result;
+          try {
+            result = await compiler.compileImageTargets([img]);
+          } catch (innerErr) {
+            console.error('compileImageTargets error', innerErr);
+            throw innerErr;
+          }
+          const mindData = compiler.exportData ? compiler.exportData() : (result && result.exportData ? result.exportData() : result);
 
           const blob = new Blob([mindData], { type: "application/octet-stream" });
           const a = document.createElement("a");
@@ -169,7 +180,19 @@
           const form = new FormData();
           form.append('image', markerFile);
 
-          const resp = await fetch('http://localhost:3000/compile', { method: 'POST', body: form });
+          // try localhost first, then relative path to backend. This helps when admin is served from same host.
+          let resp;
+          try {
+            resp = await fetch('http://localhost:3000/compile', { method: 'POST', body: form });
+          } catch (errLocal) {
+            // fallback to relative path
+            try {
+              resp = await fetch('/compile', { method: 'POST', body: form });
+            } catch (errRel) {
+              throw new Error('Could not reach backend /compile on localhost or relative path. Details: ' + errLocal.message + ' / ' + errRel.message);
+            }
+          }
+
           if (!resp.ok) throw new Error('Server compile failed: ' + resp.statusText);
 
           const arrayBuffer = await resp.arrayBuffer();
