@@ -44,4 +44,23 @@ app.post("/upload", upload.fields([{ name: "image" }, { name: "video" }]), async
   }
 });
 
+// Compile an image to .mind and return the binary
+app.post("/compile", upload.single("image"), async (req, res) => {
+  try {
+    const imageFile = req.file;
+    if (!imageFile) return res.status(400).json({ success: false, error: "No image file provided" });
+
+    const mindPath = await compileToMind(imageFile.path, "src/uploads/minds");
+    const mindBuffer = fs.readFileSync(mindPath);
+
+    // Set headers so client can download / process the binary
+    res.setHeader("Content-Type", "application/octet-stream");
+    res.setHeader("Content-Disposition", `attachment; filename="${path.basename(mindPath)}"`);
+    res.send(mindBuffer);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 app.listen(3000, () => console.log("✅ Backend running at http://localhost:3000"));

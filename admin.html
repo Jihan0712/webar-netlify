@@ -42,9 +42,14 @@
               <label class="block text-sm font-medium mb-1">Marker Image (.jpg/.png)</label>
               <div class="flex gap-2">
                 <input id="markerFile" type="file" accept=".jpg,.jpeg,.png" class="flex-1 border p-2 rounded-md" />
-                <button id="generateMindFile" class="bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700 transition">
-                  Generate .mind
-                </button>
+                <div class="flex gap-2">
+                  <button id="generateMindFile" class="bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700 transition">
+                    Generate .mind
+                  </button>
+                  <button id="serverCompile" class="bg-indigo-600 text-white px-4 py-2 rounded-md hover:bg-indigo-700 transition">
+                    Compile on Server
+                  </button>
+                </div>
               </div>
               <p id="compileStatus" class="text-sm text-gray-500 mt-1"></p>
             </div>
@@ -87,7 +92,7 @@
 
     <!-- MindAR Compiler Integration -->
     <script type="module">
-      import { Compiler } from 'https://cdn.jsdelivr.net/gh/hiukim/mind-ar-js/dist/mindar-image.prod.js';
+      import { Compiler } from './mind-ar-js/dist/mindar-image.prod.js';
 
       const SUPABASE_URL = "https://vleqrpqfjkcazeowczjy.supabase.co";
       const SUPABASE_ANON_KEY = "sb_publishable_yB6MBOTVLquZgR4X6yqhTQ_0wBFkhrZ";
@@ -149,29 +154,75 @@
         }
       });
 
+      // Server-side compile flow: send image to backend /compile which returns .mind binary
+      document.getElementById('serverCompile').addEventListener('click', async () => {
+        const markerFile = document.getElementById('markerFile').files[0];
+        if (!markerFile) {
+          compileStatus.textContent = '⚠️ Please select an image file first.';
+          return;
+        }
+
+        compileStatus.textContent = '🔧 Sending image to server for compilation...';
+
+        try {
+          const form = new FormData();
+          form.append('image', markerFile);
+
+          const resp = await fetch('http://localhost:3000/compile', { method: 'POST', body: form });
+          if (!resp.ok) throw new Error('Server compile failed: ' + resp.statusText);
+
+          const arrayBuffer = await resp.arrayBuffer();
+          const blob = new Blob([arrayBuffer], { type: 'application/octet-stream' });
+          const filename = markerFile.name.replace(/\.[^/.]+$/, '') + '.mind';
+
+          compileStatus.textContent = '⬆️ Uploading compiled .mind to Supabase storage...';
+          const fileForUpload = new File([blob], filename, { type: 'application/octet-stream' });
+          const timestamp = Date.now();
+          const mindPath = `minds/${timestamp}-${filename}`;
+          const { error: mindErr } = await supabase.storage.from('assets').upload(mindPath, fileForUpload);
+          if (mindErr) throw mindErr;
+
+          const mindUrl = supabase.storage.from('assets').getPublicUrl(mindPath).data.publicUrl;
+
+          // Store the server uploaded URL so upload handler can reuse it
+          document.getElementById('mindFile').dataset.mindUrl = mindUrl;
+          compileStatus.textContent = '✅ Compiled and uploaded to storage! Ready to Upload.';
+        } catch (err) {
+          console.error(err);
+          compileStatus.textContent = '❌ Server compile failed: ' + (err.message || JSON.stringify(err));
+        }
+      });
+
       // 📤 Upload Mind + Video + DB Entry
       uploadBtn.addEventListener("click", async () => {
         const name = document.getElementById("name").value.trim();
-        const mind = document.getElementById("mindFile").files[0];
+        const mindInput = document.getElementById("mindFile");
+        const mind = mindInput.files[0];
+        const serverMindUrl = mindInput.dataset.mindUrl;
         const video = document.getElementById("videoFile").files[0];
 
-        if (!name || !mind || !video) {
+        if (!name || (!mind && !serverMindUrl) || !video) {
           alert("⚠️ Please fill all fields and upload required files.");
           return;
         }
 
         statusEl.textContent = "⏳ Uploading files...";
         const timestamp = Date.now();
-        const mindPath = `minds/${timestamp}-${mind.name}`;
+        let mindPath = null;
+        if (mind) mindPath = `minds/${timestamp}-${mind.name}`;
         const videoPath = `videos/${timestamp}-${video.name}`;
 
-        const { error: mindErr } = await supabase.storage.from("assets").upload(mindPath, mind);
-        if (mindErr) return (statusEl.textContent = "❌ Mind upload failed: " + mindErr.message);
+        if (mindPath) {
+          const { error: mindErr } = await supabase.storage.from("assets").upload(mindPath, mind);
+          if (mindErr) return (statusEl.textContent = "❌ Mind upload failed: " + mindErr.message);
+        }
 
         const { error: vidErr } = await supabase.storage.from("assets").upload(videoPath, video);
         if (vidErr) return (statusEl.textContent = "❌ Video upload failed: " + vidErr.message);
 
-        const mindUrl = supabase.storage.from("assets").getPublicUrl(mindPath).data.publicUrl;
+        const mindUrl = serverMindUrl
+          ? serverMindUrl
+          : supabase.storage.from("assets").getPublicUrl(mindPath).data.publicUrl;
         const videoUrl = supabase.storage.from("assets").getPublicUrl(videoPath).data.publicUrl;
 
         const { error: dbErr } = await supabase
@@ -183,6 +234,7 @@
         statusEl.textContent = "✅ Upload complete!";
         document.getElementById("name").value = "";
         document.getElementById("mindFile").value = "";
+        delete document.getElementById('mindFile').dataset.mindUrl;
         document.getElementById("videoFile").value = "";
         loadTargets();
       });
