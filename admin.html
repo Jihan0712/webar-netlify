@@ -92,7 +92,8 @@
 
     <!-- MindAR Compiler Integration -->
     <script type="module">
-      import { Compiler } from './mind-ar-js/dist/mindar-image.prod.js';
+  // Load Compiler from CDN because local `mind-ar-js/dist` is not present in this repo
+  import { Compiler } from 'https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image.prod.js';
 
       const SUPABASE_URL = "https://vleqrpqfjkcazeowczjy.supabase.co";
       const SUPABASE_ANON_KEY = "sb_publishable_yB6MBOTVLquZgR4X6yqhTQ_0wBFkhrZ";
