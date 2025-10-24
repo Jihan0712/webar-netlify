@@ -181,12 +181,17 @@
           else aframeVideoAsset.addEventListener("loadedmetadata", startDrawLoop, { once: true });
         });
 
-        // 🔊 Modified: trigger unmute + play via overlay
+        // 🔊 Modified: require a user tap to enable audio/play permission, but DO NOT start
+        // playback until the tracked image is found. This avoids playing the video before
+        // a target is visible.
         const startScreen = document.getElementById("start-screen");
+        let userInteracted = false;
         startScreen.addEventListener("click", () => {
           startScreen.classList.add("hidden");
+          // mark that the user performed a gesture, and allow unmuting
+          userInteracted = true;
           aframeVideoAsset.muted = false;
-          aframeVideoAsset.play().catch((err) => console.warn("play blocked:", err));
+          // do not call play() here — playback will start when the target is found
         }, { once: true });
 
         // Stabilizer - smooth movement/rotation
@@ -210,7 +215,27 @@
 
         target.addEventListener("targetFound", () => {
           console.log("🎯 Target found — play video");
-          aframeVideoAsset.play().catch((e) => console.warn("play error:", e));
+          // Only attempt to play if we have a user gesture that permits playback with audio.
+          // If the user hasn't interacted yet, attempt to play silently (may be blocked by browser).
+          if (userInteracted) {
+            aframeVideoAsset.play().catch((e) => console.warn("play error:", e));
+          } else {
+            // Try to play (may be blocked). If blocked, show a small prompt so user can tap to enable playback.
+            aframeVideoAsset.play().catch((e) => {
+              console.warn("play blocked (no user gesture):", e);
+              const prompt = document.createElement('div');
+              prompt.id = 'play-prompt';
+              prompt.style.cssText = 'position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#111;color:#fff;padding:8px 12px;border-radius:8px;z-index:10001;cursor:pointer;';
+              prompt.textContent = 'Tap to enable video playback';
+              document.body.appendChild(prompt);
+              prompt.addEventListener('click', () => {
+                userInteracted = true;
+                aframeVideoAsset.muted = false;
+                aframeVideoAsset.play().catch(() => {});
+                prompt.remove();
+              }, { once: true });
+            });
+          }
         });
 
         target.addEventListener("targetLost", () => {
