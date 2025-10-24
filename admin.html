@@ -43,9 +43,6 @@
               <div class="flex gap-2">
                 <input id="markerFile" type="file" accept=".jpg,.jpeg,.png" class="flex-1 border p-2 rounded-md" />
                 <div class="flex gap-2">
-                  <button id="generateMindFile" class="bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700 transition">
-                    Generate .mind
-                  </button>
                   <button id="serverCompile" class="bg-indigo-600 text-white px-4 py-2 rounded-md hover:bg-indigo-700 transition">
                     Compile on Server
                   </button>
@@ -55,10 +52,7 @@
               <p class="text-xs text-gray-400">Tip: large images will be resized to 1024px max to speed up compilation.</p>
             </div>
 
-            <div>
-              <label class="block text-sm font-medium mb-1">.mind File</label>
-              <input id="mindFile" type="file" accept=".mind" class="w-full" />
-            </div>
+            <!-- .mind file upload removed: compilation is handled client-side and uploaded directly to storage -->
 
             <div>
               <label class="block text-sm font-medium mb-1">.mp4 Video</label>
@@ -93,7 +87,7 @@
 
     <!-- MindAR Compiler Integration -->
     <script type="module">
-      // We'll dynamically load TFJS (with fallbacks) and the Compiler (mind-ar) so the page
+      // dynamically load TFJS (with fallbacks) and the Compiler (mind-ar) so the page
       // can try multiple TF versions and avoid mismatches that cause minified runtime errors.
       let Compiler = null;
 
@@ -118,7 +112,7 @@
           const url = `https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@${v}/dist/tf.min.js`;
           try {
             await loadScript(url);
-            // quick sanity check
+            // quick sanity check kaya pa ba?
             if (typeof tf !== 'undefined' && tf?.version?.tfjs) {
               console.log('Loaded tfjs', tf.version.tfjs);
               return;
@@ -133,7 +127,7 @@
         throw lastErr || new Error('Failed to load any tfjs version');
       }
 
-      // initialize TF and Compiler; other functions should await readyPromise
+      // initialize TF and Compiler, other functions should await readyPromise
       const readyPromise = (async () => {
         await loadTfWithFallback();
         try {
@@ -146,14 +140,14 @@
         }
       })();
 
-      // Resize image to reduce memory/compute for client-side compile
+      // Resize image to reduce memory client side server compile
       async function resizeImage(file, maxDim = 1024) {
         const img = new Image();
         img.src = URL.createObjectURL(file);
         await img.decode();
         let { width, height } = img;
         if (width <= maxDim && height <= maxDim) {
-          // no resize needed; return original file
+          // no resize needed
           return file;
         }
         const aspect = width / height;
@@ -177,6 +171,10 @@
       const SUPABASE_URL = "https://vleqrpqfjkcazeowczjy.supabase.co";
       const SUPABASE_ANON_KEY = "sb_publishable_yB6MBOTVLquZgR4X6yqhTQ_0wBFkhrZ";
       const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+  // Holds the URL of a .mind file that was compiled & uploaded (via the "Compile on Server" button)
+  // This replaces the removed #mindFile DOM element dataset usage.
+  let uploadedMindUrl = null;
 
       const uploadBtn = document.getElementById("upload");
       const statusEl = document.getElementById("status");
@@ -202,48 +200,10 @@
         loadTargets();
       });
 
-      // 🧠 Generate .mind file from image (client-side)
-      document.getElementById("generateMindFile").addEventListener("click", async () => {
-        const markerFile = document.getElementById("markerFile").files[0];
-        if (!markerFile) {
-          compileStatus.textContent = "⚠️ Please select an image file first.";
-          return;
-        }
+      // note: explicit "Generate .mind" action (download) was removed; compilation is performed
+      // in-browser when needed and uploaded directly to Supabase storage.
 
-        compileStatus.textContent = "🧠 Generating .mind file... Please wait.";
-
-        try {
-          const img = new Image();
-          img.src = URL.createObjectURL(markerFile);
-          await img.decode();
-
-          // Some versions expect tf to be available globally; ensure it's loaded
-          if (typeof tf === 'undefined') throw new Error('TensorFlow.js (tf) is not loaded. Make sure the tf.min.js script is available.');
-
-          const compiler = new Compiler();
-          let result;
-          try {
-            result = await compiler.compileImageTargets([img]);
-          } catch (innerErr) {
-            console.error('compileImageTargets error', innerErr);
-            throw innerErr;
-          }
-          const mindData = compiler.exportData ? compiler.exportData() : (result && result.exportData ? result.exportData() : result);
-
-          const blob = new Blob([mindData], { type: "application/octet-stream" });
-          const a = document.createElement("a");
-          a.href = URL.createObjectURL(blob);
-          a.download = `${markerFile.name.replace(/\.[^/.]+$/, "")}.mind`;
-          a.click();
-
-          compileStatus.textContent = "✅ .mind file generated successfully!";
-        } catch (err) {
-          console.error(err);
-          compileStatus.textContent = "❌ Failed to generate .mind file: " + err.message;
-        }
-      });
-
-      // helper: compile a marker image file in-browser and return an ArrayBuffer
+      // helper:: compile a marker image file in-browser and return an ArrayBuffer
       async function compileImageClient(markerFile, progressCallback) {
         // wait for TF and Compiler to be ready
         await readyPromise;
@@ -258,7 +218,7 @@
         if (!Compiler) throw new Error('Compiler not loaded');
 
         const compiler = new Compiler();
-        // mind-ar's compileImageTargets accepts a progress callback in some variants; we try to pass one
+        // compileImageTargets accepts a progress callback one at a time only (probably)
         try {
           console.log('tf.version:', tf?.version?.tfjs || 'unknown');
           if (progressCallback) {
@@ -276,7 +236,7 @@
         return buffer;
       }
 
-      // "Server Compile" button: in Netlify setup we don't have a server compile endpoint, so perform client-side compile + upload instead.
+      // Server Compile button
       document.getElementById('serverCompile').addEventListener('click', async () => {
         const markerFile = document.getElementById('markerFile').files[0];
         if (!markerFile) {
@@ -299,7 +259,8 @@
           if (mindErr) throw mindErr;
 
           const mindUrl = supabase.storage.from('assets').getPublicUrl(mindPath).data.publicUrl;
-          document.getElementById('mindFile').dataset.mindUrl = mindUrl;
+          // store uploaded mind URL for later use by the Upload flow
+          uploadedMindUrl = mindUrl;
           compileStatus.textContent = '✅ Compiled and uploaded to storage! Ready to Upload.';
           statusEl.textContent = '';
         } catch (err) {
@@ -307,41 +268,37 @@
           console.error('Compile (serverCompile) failed', err);
           const tfver = (typeof tf !== 'undefined' && tf?.version?.tfjs) ? tf.version.tfjs : 'tf not loaded';
           compileStatus.textContent = `❌ Compile failed: ${err.message || err}. (tfjs: ${tfver})`;
-          // also show UA to help debugging
+          // debugging
           console.error('UserAgent:', navigator.userAgent);
         }
       });
 
-      // 📤 Upload Mind + Video + DB Entry
+      // Upload Video + DB Entry. .mind files are created client-side and uploaded to storage
+      // either automatically during this flow or earlier via the "Compile on Server" button
       uploadBtn.addEventListener("click", async () => {
         const name = document.getElementById("name").value.trim();
-        const mindInput = document.getElementById("mindFile");
-        const mind = mindInput.files[0];
-        const serverMindUrl = mindInput.dataset.mindUrl;
         const video = document.getElementById("videoFile").files[0];
         const markerImage = document.getElementById("markerFile").files[0];
 
-        if (!name || (!mind && !serverMindUrl && !markerImage) || !video) {
+        // require a name, a video, and either a previously uploaded .mind or a marker image to compile now
+        if (!name || (!uploadedMindUrl && !markerImage) || !video) {
           alert("⚠️ Please fill all fields and upload required files.");
           return;
         }
 
         statusEl.textContent = "⏳ Uploading files...";
         const timestamp = Date.now();
-        let mindPath = null;
-        if (mind) mindPath = `minds/${timestamp}-${mind.name}`;
         const videoPath = `videos/${timestamp}-${video.name}`;
 
-        // If user provided a marker image (no .mind) - let the backend compile and upload everything server-side
-        if (!mind && !serverMindUrl && markerImage) {
+        // If user provided a marker image and we don't already have an uploaded .mind, compile+upload now
+        if (!uploadedMindUrl && markerImage) {
           try {
             statusEl.textContent = "⏳ Compiling marker image in the browser...";
-            // compile client-side
             const buffer = await compileImageClient(markerImage, (p) => {
               compileStatus.textContent = `Progress: ${p.toFixed(1)}%`;
             });
 
-            compileStatus.textContent = '⬆️ Uploading compiled .mind to Supabase storage...';
+            compileStatus.textContent = 'Uploading compiled .mind to Supabase storage...';
             const filename = markerImage.name.replace(/\.[^/.]+$/, '') + '.mind';
             const fileForUpload = new File([buffer], filename, { type: 'application/octet-stream' });
             const mindPathLocal = `minds/${timestamp}-${filename}`;
@@ -362,11 +319,10 @@
 
             statusEl.textContent = '✅ Upload complete (client-side compile)!';
             document.getElementById("name").value = "";
-            document.getElementById("mindFile").value = "";
-            delete document.getElementById('mindFile').dataset.mindUrl;
             document.getElementById("videoFile").value = "";
             document.getElementById('markerFile').value = "";
             compileStatus.textContent = '';
+            uploadedMindUrl = null;
             loadTargets();
             return;
           } catch (err) {
@@ -376,32 +332,24 @@
           }
         }
 
-        // Otherwise, use client-side uploaded .mind (either uploaded from client compile or chosen file)
-        if (mindPath) {
-          const { error: mindErr } = await supabase.storage.from("assets").upload(mindPath, mind);
-          if (mindErr) return (statusEl.textContent = "❌ Mind upload failed: " + mindErr.message);
+        // Otherwise, use the previously uploaded .mind (uploadedMindUrl) to insert with the video
+        if (uploadedMindUrl) {
+          // upload video
+          const { error: vidErr } = await supabase.storage.from('assets').upload(videoPath, video);
+          if (vidErr) return (statusEl.textContent = "❌ Video upload failed: " + vidErr.message);
+
+          const videoUrl = supabase.storage.from('assets').getPublicUrl(videoPath).data.publicUrl;
+
+          const { error: dbErr } = await supabase.from('targets').insert([{ name, mindUrl: uploadedMindUrl, videoUrl, is_active: false }]);
+          if (dbErr) return (statusEl.textContent = "❌ Database insert failed: " + dbErr.message);
+
+          statusEl.textContent = "✅ Upload complete!";
+          document.getElementById("name").value = "";
+          document.getElementById("videoFile").value = "";
+          uploadedMindUrl = null;
+          loadTargets();
+          return;
         }
-
-        const { error: vidErr } = await supabase.storage.from("assets").upload(videoPath, video);
-        if (vidErr) return (statusEl.textContent = "❌ Video upload failed: " + vidErr.message);
-
-        const mindUrl = serverMindUrl
-          ? serverMindUrl
-          : supabase.storage.from("assets").getPublicUrl(mindPath).data.publicUrl;
-        const videoUrl = supabase.storage.from("assets").getPublicUrl(videoPath).data.publicUrl;
-
-        const { error: dbErr } = await supabase
-          .from("targets")
-          .insert([{ name, mindUrl, videoUrl, is_active: false }]);
-
-        if (dbErr) return (statusEl.textContent = "❌ Database insert failed: " + dbErr.message);
-
-        statusEl.textContent = "✅ Upload complete!";
-        document.getElementById("name").value = "";
-        document.getElementById("mindFile").value = "";
-        delete document.getElementById('mindFile').dataset.mindUrl;
-        document.getElementById("videoFile").value = "";
-        loadTargets();
       });
 
       async function loadTargets() {
