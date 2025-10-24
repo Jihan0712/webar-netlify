@@ -87,8 +87,7 @@
 
     <!-- MindAR Compiler Integration -->
     <script type="module">
-      // dynamically load TFJS (with fallbacks) and the Compiler (mind-ar) so the page
-      // can try multiple TF versions and avoid mismatches that cause minified runtime errors.
+      // load TFJS (with fallbacks) and the Compiler (mind-ar) so the page has multiple fallback
       let Compiler = null;
 
       function loadScript(url) {
@@ -173,7 +172,6 @@
       const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
   // Holds the URL of a .mind file that was compiled & uploaded (via the "Compile on Server" button)
-  // This replaces the removed #mindFile DOM element dataset usage.
   let uploadedMindUrl = null;
 
       const uploadBtn = document.getElementById("upload");
@@ -201,9 +199,6 @@
         uploadTab.classList.remove("bg-blue-600");
         loadTargets();
       });
-
-      // note: explicit "Generate .mind" action (download) was removed; compilation is performed
-      // in-browser when needed and uploaded directly to Supabase storage.
 
       // helper:: compile a marker image file in-browser and return an ArrayBuffer
       async function compileImageClient(markerFile, progressCallback) {
@@ -275,14 +270,13 @@
         }
       });
 
-      // Upload Video + DB Entry. .mind files are created client-side and uploaded to storage
-      // either automatically during this flow or earlier via the "Compile on Server" button
+      // upload button action
       uploadBtn.addEventListener("click", async () => {
         const name = document.getElementById("name").value.trim();
         const video = document.getElementById("videoFile").files[0];
         const markerImage = document.getElementById("markerFile").files[0];
 
-        // require a name, a video, and either a previously uploaded .mind or a marker image to compile now
+        // req checker
         if (!name || (!uploadedMindUrl && !markerImage) || !video) {
           alert("⚠️ Please fill all fields and upload required files.");
           return;
@@ -292,7 +286,7 @@
         const timestamp = Date.now();
         const videoPath = `videos/${timestamp}-${video.name}`;
 
-        // If user provided a marker image and we don't already have an uploaded .mind, compile+upload now
+        // If user provided a marker image and we dont already have an uploaded .mind, compile+upload now
         if (!uploadedMindUrl && markerImage) {
           try {
             statusEl.textContent = "⏳ Compiling marker image in the browser...";
@@ -334,7 +328,7 @@
           }
         }
 
-        // Otherwise, use the previously uploaded .mind (uploadedMindUrl) to insert with the video
+        // .mind upload
         if (uploadedMindUrl) {
           // upload video
           const { error: vidErr } = await supabase.storage.from('assets').upload(videoPath, video);
@@ -381,7 +375,7 @@
       }
 
       window.setActive = async (targetId) => {
-        // clear any existing clear-timer so messages don't disappear unexpectedly
+        // Timer notice
         if (statusClearTimer) {
           clearTimeout(statusClearTimer);
           statusClearTimer = null;

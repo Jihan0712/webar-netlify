@@ -10,7 +10,6 @@
     <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
 
     <style>
-      /* 👇 Added: Tap-to-Start overlay */
       #start-screen {
         position: fixed;
         inset: 0;
@@ -116,7 +115,7 @@
           }, 100);
         }
 
-        // Draw video into square canvas texture
+        // 1:1 ratio video
         whenPlaneMeshReady((mesh) => {
           planeEl.setAttribute("width", 1);
           planeEl.setAttribute("height", 1);
@@ -181,17 +180,15 @@
           else aframeVideoAsset.addEventListener("loadedmetadata", startDrawLoop, { once: true });
         });
 
-        // 🔊 Modified: require a user tap to enable audio/play permission, but DO NOT start
-        // playback until the tracked image is found. This avoids playing the video before
-        // a target is visible.
+        // start when found 
         const startScreen = document.getElementById("start-screen");
         let userInteracted = false;
         startScreen.addEventListener("click", () => {
           startScreen.classList.add("hidden");
-          // mark that the user performed a gesture, and allow unmuting
+          // user tapping
           userInteracted = true;
           aframeVideoAsset.muted = false;
-          // do not call play() here — playback will start when the target is found
+          // do not call play
         }, { once: true });
 
         // Stabilizer - smooth movement/rotation
@@ -215,12 +212,11 @@
 
         target.addEventListener("targetFound", () => {
           console.log("🎯 Target found — play video");
-          // Only attempt to play if we have a user gesture that permits playback with audio.
-          // If the user hasn't interacted yet, attempt to play silently (may be blocked by browser).
+          // User interaction check
           if (userInteracted) {
             aframeVideoAsset.play().catch((e) => console.warn("play error:", e));
           } else {
-            // Try to play (may be blocked). If blocked, show a small prompt so user can tap to enable playback.
+            // Try to play (checking if blocked)
             aframeVideoAsset.play().catch((e) => {
               console.warn("play blocked (no user gesture):", e);
               const prompt = document.createElement('div');
@@ -247,7 +243,7 @@
   </head>
 
   <body>
-    <!-- 👇 Added: Tap-to-Start overlay -->
+    <!-- Tap-to-Start overlay -->
     <div id="start-screen">
       <h1>👆 Tap to Get Started</h1>
       <p>Enable audio and begin your AR experience</p>
