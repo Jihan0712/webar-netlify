@@ -22,15 +22,18 @@
       <label class="block text-sm">Email</label>
       <input id="email" type="email" class="w-full border rounded p-2 mb-3" placeholder="you@company.com" />
 
+      <label class="block text-sm">Password</label>
+      <input id="password" type="password" class="w-full border rounded p-2 mb-3" placeholder="Create a password to use with login" />
+
       <label class="block text-sm">Phone (optional)</label>
       <input id="phone" type="tel" class="w-full border rounded p-2 mb-4" placeholder="Optional phone" />
 
       <div class="flex gap-2 mb-2">
-        <button id="magic" class="flex-1 bg-yellow-500 text-white rounded p-2">Register (magic link)</button>
+        <button id="registerPw" class="flex-1 bg-blue-600 text-white rounded p-2">Register (email + password)</button>
         <button id="request" class="flex-1 bg-gray-200 rounded p-2">Request account</button>
       </div>
 
-      <p class="text-xs text-gray-500">Register with a magic link to sign in immediately. Use Request account to ask an admin to approve your brand account (will insert into `invitations`).</p>
+      <p class="text-xs text-gray-500">Register with an email and password to sign in via the login page. Use Request account to ask an admin to approve your brand account (will insert into `invitations`).</p>
     </div>
 
     <script>
@@ -38,11 +41,12 @@
       const SUPABASE_ANON_KEY = "sb_publishable_yB6MBOTVLquZgR4X6yqhTQ_0wBFkhrZ";
       const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-      const fullNameEl = document.getElementById('fullName');
-      const brandEl = document.getElementById('brand');
-      const emailEl = document.getElementById('email');
-      const phoneEl = document.getElementById('phone');
-      const magicBtn = document.getElementById('magic');
+  const fullNameEl = document.getElementById('fullName');
+  const brandEl = document.getElementById('brand');
+  const emailEl = document.getElementById('email');
+  const passwordEl = document.getElementById('password');
+  const phoneEl = document.getElementById('phone');
+  const registerPwBtn = document.getElementById('registerPw');
       const requestBtn = document.getElementById('request');
       const alertEl = document.getElementById('alert');
 
@@ -52,14 +56,23 @@
         if (msg) setTimeout(() => { alertEl.textContent = ''; }, 7000);
       }
 
-      magicBtn.addEventListener('click', async () => {
+      registerPwBtn.addEventListener('click', async () => {
         const email = (emailEl.value || '').trim().toLowerCase();
-        if (!email) return showAlert('Enter a valid email to receive a magic link.');
+        const password = (document.getElementById('password').value || '').trim();
+        if (!email || !password) return showAlert('Please provide both email and password to register.');
         try {
           const redirect = window.location.origin + '/admin.html';
-          const { error } = await supabase.auth.signInWithOtp({ email, options: { emailRedirectTo: redirect } });
+          // sign up with email + password; Supabase will send confirmation / enable immediate sign-in depending on project settings
+          const { data, error } = await supabase.auth.signUp({ email, password, options: { emailRedirectTo: redirect } });
           if (error) return showAlert(error.message || JSON.stringify(error));
-          showAlert('Magic link sent — check your email.', false);
+          // If email confirmations are enabled, user may need to confirm via email. Inform the user accordingly.
+          if (data?.user) {
+            showAlert('Registration successful. You can now log in with your email and password.', false);
+          } else {
+            showAlert('Registration request sent — check your email for confirmation or sign-in link.', false);
+          }
+          // clear sensitive fields
+          if (passwordEl) passwordEl.value = '';
         } catch (e) {
           console.error(e);
           showAlert(e?.message || String(e));
