@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>INRL AR — Brand Register</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  </head>
+  <body class="min-h-screen bg-gray-100 flex items-center justify-center">
+    <div class="w-full max-w-lg bg-white rounded shadow p-6">
+      <h1 class="text-2xl font-bold mb-4">INRL AR — Register as a Brand / Client</h1>
+
+      <div id="alert" class="text-sm text-red-600 mb-3"></div>
+
+      <label class="block text-sm">Full name</label>
+      <input id="fullName" type="text" class="w-full border rounded p-2 mb-3" placeholder="Your name" />
+
+      <label class="block text-sm">Company / Brand</label>
+      <input id="brand" type="text" class="w-full border rounded p-2 mb-3" placeholder="Company or brand name" />
+
+      <label class="block text-sm">Email</label>
+      <input id="email" type="email" class="w-full border rounded p-2 mb-3" placeholder="you@company.com" />
+
+      <label class="block text-sm">Phone (optional)</label>
+      <input id="phone" type="tel" class="w-full border rounded p-2 mb-4" placeholder="Optional phone" />
+
+      <div class="flex gap-2 mb-2">
+        <button id="magic" class="flex-1 bg-yellow-500 text-white rounded p-2">Register (magic link)</button>
+        <button id="request" class="flex-1 bg-gray-200 rounded p-2">Request account</button>
+      </div>
+
+      <p class="text-xs text-gray-500">Register with a magic link to sign in immediately. Use Request account to ask an admin to approve your brand account (will insert into `invitations`).</p>
+    </div>
+
+    <script>
+      const SUPABASE_URL = "https://vleqrpqfjkcazeowczjy.supabase.co";
+      const SUPABASE_ANON_KEY = "sb_publishable_yB6MBOTVLquZgR4X6yqhTQ_0wBFkhrZ";
+      const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+      const fullNameEl = document.getElementById('fullName');
+      const brandEl = document.getElementById('brand');
+      const emailEl = document.getElementById('email');
+      const phoneEl = document.getElementById('phone');
+      const magicBtn = document.getElementById('magic');
+      const requestBtn = document.getElementById('request');
+      const alertEl = document.getElementById('alert');
+
+      function showAlert(msg, isError = true) {
+        alertEl.textContent = msg;
+        alertEl.style.color = isError ? 'crimson' : 'green';
+        if (msg) setTimeout(() => { alertEl.textContent = ''; }, 7000);
+      }
+
+      magicBtn.addEventListener('click', async () => {
+        const email = (emailEl.value || '').trim().toLowerCase();
+        if (!email) return showAlert('Enter a valid email to receive a magic link.');
+        try {
+          const redirect = window.location.origin + '/admin.html';
+          const { error } = await supabase.auth.signInWithOtp({ email, options: { emailRedirectTo: redirect } });
+          if (error) return showAlert(error.message || JSON.stringify(error));
+          showAlert('Magic link sent — check your email.', false);
+        } catch (e) {
+          console.error(e);
+          showAlert(e?.message || String(e));
+        }
+      });
+
+      // Request account — inserts into invitations for admin to review
+      requestBtn.addEventListener('click', async () => {
+        const email = (emailEl.value || '').trim().toLowerCase();
+        const name = (fullNameEl.value || '').trim() || null;
+        const brand = (brandEl.value || '').trim() || null;
+        const phone = (phoneEl.value || '').trim() || null;
+        if (!email || !brand) return showAlert('Please provide at least email and brand name for a request.');
+        try {
+          const { data, error } = await supabase.from('invitations').insert([{ email, name, brand, phone }]).select();
+          if (error) {
+            console.error('Invitation insert failed', error);
+            return showAlert('Unable to submit request automatically. Ensure migrations are applied or contact an admin.');
+          }
+          showAlert('Request submitted. An admin will review and approve your account.', false);
+          fullNameEl.value = '';
+          brandEl.value = '';
+          emailEl.value = '';
+          phoneEl.value = '';
+        } catch (e) {
+          console.error(e);
+          showAlert('Request failed: ' + (e?.message || String(e)));
+        }
+      });
+    </script>
+  </body>
+</html>

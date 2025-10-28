@@ -78,15 +78,9 @@
         } catch (e) { showError(e); }
       });
 
-      signUpBtn.addEventListener('click', async () => {
-        try {
-          const email = emailEl.value.trim();
-          const password = passEl.value;
-          if (!email || !password) return showError('Enter email and password');
-          const { error } = await supabase.auth.signUp({ email, password });
-          if (error) return showError(error);
-          msg.textContent = 'Check your inbox to confirm the account.';
-        } catch (e) { showError(e); }
+      signUpBtn.addEventListener('click', () => {
+        // Redirect to brand/client registration page; registration flow lives in register.html
+        window.location.href = '/register.html';
       });
 
       magicBtn.addEventListener('click', async () => {
