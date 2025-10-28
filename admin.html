@@ -26,7 +26,15 @@
 
       <!-- Main content -->
       <main class="flex-1 p-8">
-        <p id="status" class="mb-4 text-sm text-gray-600"></p>
+        <div class="flex justify-between items-start">
+          <p id="status" class="mb-4 text-sm text-gray-600"></p>
+          <div class="flex items-center gap-3">
+            <select id="profileSelect" class="border rounded p-1 text-sm"></select>
+            <button id="newProfile" class="bg-green-600 text-white px-3 py-1 rounded text-sm">New Profile</button>
+            <div id="userMenu" class="text-sm text-gray-600"></div>
+            <button id="signOut" class="bg-red-500 text-white px-2 py-1 rounded text-sm">Sign out</button>
+          </div>
+        </div>
 
         <!-- Upload Section -->
         <section id="uploadSection">
@@ -167,12 +175,18 @@
         }, 'image/jpeg', 0.9));
       }
 
-      const SUPABASE_URL = "https://vleqrpqfjkcazeowczjy.supabase.co";
-      const SUPABASE_ANON_KEY = "sb_publishable_yB6MBOTVLquZgR4X6yqhTQ_0wBFkhrZ";
-      const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    const SUPABASE_URL = "https://vleqrpqfjkcazeowczjy.supabase.co";
+    const SUPABASE_ANON_KEY = "sb_publishable_yB6MBOTVLquZgR4X6yqhTQ_0wBFkhrZ";
+    const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
   // Holds the URL of a .mind file that was compiled & uploaded (via the "Compile on Server" button)
   let uploadedMindUrl = null;
+
+  // Auth / profile state
+  let currentUser = null;
+  let profiles = []; // profiles for this user {id, user_id, name, brand}
+  let activeProfile = null; // selected profile object
+  let isAdmin = false; // role flag — true when user is an admin
 
       const uploadBtn = document.getElementById("upload");
       const statusEl = document.getElementById("status");
@@ -191,6 +205,195 @@
         uploadTab.classList.add("bg-blue-600");
         listTab.classList.remove("bg-blue-600");
       });
+
+      // --- Auth & profile helpers ---------------------------------
+      // Ensure user is signed in; otherwise redirect to login
+      async function ensureAuth() {
+        try {
+          const { data } = await supabase.auth.getSession();
+          const session = data?.session || null;
+          if (!session) {
+            window.location.href = '/login.html';
+            return false;
+          }
+          currentUser = session.user;
+          document.getElementById('userMenu').textContent = currentUser.email;
+          // determine role: check admins table for a row with this user_id
+          try {
+            const { data: adminRows, error: adminErr } = await supabase.from('admins').select('id').eq('user_id', currentUser.id).limit(1);
+            if (!adminErr && adminRows && adminRows.length) {
+              isAdmin = true;
+            } else {
+              isAdmin = false;
+            }
+          } catch (e) {
+            console.warn('Could not check admin role (admins table may be missing):', e.message || e);
+            isAdmin = false;
+          }
+          // Process any pending invitations for this user: if there is an invitation for their email,
+          // create a profile for them and delete the invitation. This allows admins to invite brand users
+          // and assign a brand without using a server-side service role.
+          try {
+            const { data: invs, error: invErr } = await supabase.from('invitations').select('*').eq('email', currentUser.email).limit(1);
+            if (!invErr && invs && invs.length) {
+              const inv = invs[0];
+              // create profile linked to this user
+              await supabase.from('profiles').insert([{ user_id: currentUser.id, name: inv.name || currentUser.email, brand: inv.brand }]);
+              // remove the invitation
+              await supabase.from('invitations').delete().eq('id', inv.id);
+              console.log('Processed invitation for', currentUser.email);
+            }
+          } catch (e) {
+            console.warn('Invitation processing failed', e);
+          }
+
+          // load profiles (admins see all profiles, brand users see only their own)
+          await loadProfiles();
+          // once profiles are loaded, if the user is a brand user with exactly one profile,
+          // redirect to a profile-specific URL so the dashboard is scoped to that brand.
+          const params = new URLSearchParams(window.location.search);
+          if (!isAdmin && profiles.length === 1 && !params.get('profileId')) {
+            // redirect to admin.html?profileId=<id>
+            window.location.href = `/admin.html?profileId=${profiles[0].id}`;
+            return true; // navigation will reload
+          }
+          // if profileId present in URL, select it; otherwise load targets normally
+          const pid = params.get('profileId');
+          if (pid) {
+            activeProfile = profiles.find(p => p.id === pid) || null;
+          }
+          await loadTargets();
+          return true;
+        } catch (e) {
+          console.error('Auth check failed', e);
+          window.location.href = '/login.html';
+          return false;
+        }
+      }
+
+      // Load profiles scoped to current user
+      async function loadProfiles() {
+        if (!currentUser) return;
+        try {
+          let q = supabase.from('profiles').select('*').order('created_at', { ascending: true });
+          if (!isAdmin) q = q.eq('user_id', currentUser.id);
+          const { data, error } = await q;
+          if (error) {
+            console.warn('Could not load profiles (maybe table missing):', error.message);
+            profiles = [];
+          } else {
+            profiles = data || [];
+          }
+        } catch (e) {
+          console.warn('Could not load profiles (error):', e);
+          profiles = [];
+        }
+        renderProfileSelect();
+      }
+
+      function renderProfileSelect() {
+        const sel = document.getElementById('profileSelect');
+        sel.innerHTML = '';
+        const emptyOpt = document.createElement('option');
+        emptyOpt.value = '';
+        emptyOpt.textContent = profiles.length ? 'Select profile' : 'No profiles yet';
+        sel.appendChild(emptyOpt);
+        profiles.forEach(p => {
+          const o = document.createElement('option');
+          o.value = p.id;
+          // if admin, show owner id to help identify
+          o.textContent = isAdmin ? `${p.name} ${p.brand ? '('+p.brand+')' : ''} — ${p.user_id}` : `${p.name} ${p.brand ? '('+p.brand+')' : ''}`;
+          sel.appendChild(o);
+        });
+        // set default selection
+        if (profiles.length === 1) {
+          sel.value = profiles[0].id;
+          activeProfile = profiles[0];
+        } else if (activeProfile) {
+          sel.value = activeProfile.id;
+        }
+        sel.onchange = () => {
+          const id = sel.value;
+          activeProfile = profiles.find(x => x.id === id) || null;
+          // reload targets to reflect brand filter
+          loadTargets();
+        };
+      }
+
+      document.getElementById('newProfile').addEventListener('click', async () => {
+        if (!currentUser) return alert('Not signed in');
+        const name = prompt('Profile name (e.g., Marketing, Store A)');
+        if (!name) return;
+        const brand = prompt('Brand name (optional)');
+        try {
+          const payload = { name, brand: brand || null, user_id: currentUser.id };
+          const { error } = await supabase.from('profiles').insert([payload]);
+          if (error) throw error;
+          await loadProfiles();
+          alert('Profile created');
+        } catch (e) {
+          console.error('Create profile failed', e);
+          alert('Failed to create profile: ' + (e.message || e));
+        }
+      });
+
+      // Admin-only: invite a brand user and assign brand (creates an invitation and sends a magic link)
+      async function inviteBrandUser() {
+        if (!isAdmin) return alert('Only admins can invite brand users.');
+        const email = prompt('Brand user email (required)');
+        if (!email) return;
+        const name = prompt('User display name (optional)') || null;
+        const brand = prompt('Assigned brand (required)');
+        if (!brand) return alert('Brand is required');
+        try {
+          const { error: insErr } = await supabase.from('invitations').insert([{ email, name, brand }]);
+          if (insErr) throw insErr;
+          // send magic link to the invited email
+          const { error: otpErr } = await supabase.auth.signInWithOtp({ email });
+          if (otpErr) throw otpErr;
+          alert('Invitation sent (magic link). When the user signs in their account will be linked to the invited brand.');
+          await loadProfiles();
+        } catch (e) {
+          console.error('Invite failed', e);
+          alert('Invite failed: ' + (e.message || e));
+        }
+      }
+
+      // expose invite action only for admins
+      const inviteBtn = document.createElement('button');
+      inviteBtn.textContent = 'Invite Brand User';
+      inviteBtn.className = 'bg-yellow-500 text-white px-3 py-1 rounded text-sm';
+      inviteBtn.addEventListener('click', inviteBrandUser);
+      // insert into UI (near newProfile)
+      document.getElementById('newProfile').insertAdjacentElement('afterend', inviteBtn);
+
+      document.getElementById('signOut').addEventListener('click', async () => {
+        await supabase.auth.signOut();
+        window.location.href = '/login.html';
+      });
+
+      // Ensure auth on page load
+      ensureAuth();
+
+      // Insert target helper: tries adding brand if activeProfile exists, otherwise retries without brand
+      async function insertTarget(name, mindUrl, videoUrl) {
+        const payload = { name, mindUrl, videoUrl, is_active: false };
+        if (activeProfile && activeProfile.brand) payload.brand = activeProfile.brand;
+        try {
+          const { data, error } = await supabase.from('targets').insert([payload]);
+          if (error) {
+            // if brand column doesn't exist, retry without it
+            if (error.message && /column\s+"brand"\s+does not exist/i.test(error.message)) {
+              delete payload.brand;
+              return await supabase.from('targets').insert([{ name, mindUrl, videoUrl, is_active: false }]);
+            }
+            return { error };
+          }
+          return { data };
+        } catch (e) {
+          return { error: e };
+        }
+      }
 
       listTab.addEventListener("click", () => {
         listSection.classList.remove("hidden");
@@ -309,8 +512,8 @@
 
             const videoUrlLocal = supabase.storage.from('assets').getPublicUrl(videoPath).data.publicUrl;
 
-            // insert DB record
-            const { error: dbErr } = await supabase.from('targets').insert([{ name, mindUrl: mindUrlLocal, videoUrl: videoUrlLocal, is_active: false }]);
+            // insert DB record (include profile.brand if available)
+            const { error: dbErr } = await insertTarget(name, mindUrlLocal, videoUrlLocal);
             if (dbErr) return (statusEl.textContent = "❌ Database insert failed: " + dbErr.message);
 
             statusEl.textContent = '✅ Upload complete (client-side compile)!';
@@ -336,7 +539,7 @@
 
           const videoUrl = supabase.storage.from('assets').getPublicUrl(videoPath).data.publicUrl;
 
-          const { error: dbErr } = await supabase.from('targets').insert([{ name, mindUrl: uploadedMindUrl, videoUrl, is_active: false }]);
+          const { error: dbErr } = await insertTarget(name, uploadedMindUrl, videoUrl);
           if (dbErr) return (statusEl.textContent = "❌ Database insert failed: " + dbErr.message);
 
           statusEl.textContent = "✅ Upload complete!";
@@ -349,10 +552,11 @@
       });
 
       async function loadTargets() {
-        const { data, error } = await supabase
-          .from("targets")
-          .select("*")
-          .order("created_at", { ascending: false });
+        let query = supabase.from("targets").select("*").order("created_at", { ascending: false });
+        if (activeProfile && activeProfile.brand) {
+          query = query.eq('brand', activeProfile.brand);
+        }
+        const { data, error } = await query;
         if (error) return console.error("Error loading targets:", error);
 
         targetsTable.innerHTML = "";
@@ -439,7 +643,7 @@
         loadTargets();
       };
 
-      loadTargets();
+  // loadTargets will be called after auth/profile selection
     </script>
   </body>
 </html>

@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>INRL AR — Register</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  </head>
+  <body class="min-h-screen bg-gray-100 flex items-center justify-center">
+    <div class="w-full max-w-md bg-white rounded shadow p-6">
+      <h1 class="text-2xl font-bold mb-4">INRL AR — Register / Request Access</h1>
+
+      <div id="message" class="text-sm text-red-600 mb-2"></div>
+
+      <label class="block text-sm">Name (optional)</label>
+      <input id="name" type="text" class="w-full border rounded p-2 mb-3" />
+
+      <label class="block text-sm">Brand (optional)</label>
+      <input id="brand" type="text" class="w-full border rounded p-2 mb-3" />
+
+      <label class="block text-sm">Email</label>
+      <input id="email" type="email" class="w-full border rounded p-2 mb-3" />
+
+      <div class="flex gap-2">
+        <button id="magic" class="flex-1 bg-yellow-500 text-white rounded p-2">Register (magic link)</button>
+        <button id="request" class="flex-1 bg-gray-200 rounded p-2">Request access</button>
+      </div>
+
+      <p class="text-xs text-gray-400 mt-4">Use "Register (magic link)" to sign in via email. Use "Request access" to send an invitation request to admins (stored in `invitations` table when available).</p>
+    </div>
+
+    <script>
+      const SUPABASE_URL = "https://vleqrpqfjkcazeowczjy.supabase.co";
+      const SUPABASE_ANON_KEY = "sb_publishable_yB6MBOTVLquZgR4X6yqhTQ_0wBFkhrZ";
+      const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+      const nameEl = document.getElementById('name');
+      const brandEl = document.getElementById('brand');
+      const emailEl = document.getElementById('email');
+      const magicBtn = document.getElementById('magic');
+      const requestBtn = document.getElementById('request');
+      const msg = document.getElementById('message');
+
+      function showMessage(text, isError = false) {
+        msg.textContent = text;
+        msg.className = isError ? 'text-sm text-red-600 mb-2' : 'text-sm text-green-600 mb-2';
+        setTimeout(() => { msg.textContent = ''; msg.className = 'text-sm text-red-600 mb-2' }, 7000);
+      }
+
+      magicBtn.addEventListener('click', async () => {
+        try {
+          const email = emailEl.value.trim();
+          if (!email) return showMessage('Enter an email', true);
+          const { error } = await supabase.auth.signInWithOtp({
+            email,
+            options: { emailRedirectTo: window.location.origin + '/admin.html' }
+          });
+          if (error) return showMessage(error.message || String(error), true);
+          showMessage('Magic link sent — check your email.');
+        } catch (e) { showMessage(e?.message || String(e), true); }
+      });
+
+      // Request access — inserts into `invitations` table if available.
+      requestBtn.addEventListener('click', async () => {
+        try {
+          const email = emailEl.value.trim();
+          const name = nameEl.value.trim();
+          const brand = brandEl.value.trim();
+          if (!email) return showMessage('Enter an email to request access', true);
+
+          const { data, error } = await supabase
+            .from('invitations')
+            .insert([{ email, full_name: name || null, brand: brand || null }])
+            .select('*');
+
+          if (error) {
+            // If table or RLS not configured you'll get an error — show friendly guidance.
+            console.error('invitations insert error', error);
+            return showMessage('Unable to submit request automatically. Contact an admin or run the migration to enable invitations.', true);
+          }
+
+          showMessage('Request submitted — an admin will review it.');
+        } catch (e) { console.error(e); showMessage(e?.message || String(e), true); }
+      });
+    </script>
+  </body>
+</html>
