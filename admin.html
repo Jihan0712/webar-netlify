@@ -348,10 +348,10 @@
         try {
           const { error: insErr } = await supabase.from('invitations').insert([{ email, name, brand }]);
           if (insErr) throw insErr;
-          // send magic link to the invited email
-          const { error: otpErr } = await supabase.auth.signInWithOtp({ email });
-          if (otpErr) throw otpErr;
-          alert('Invitation sent (magic link). When the user signs in their account will be linked to the invited brand.');
+          // previously we sent a magic link here; magic-link auth was removed from the common login page.
+          // Keep invitation creation server-side only — administrators should notify the invited user
+          // (for example by email) with the next steps or an invite link generated separately.
+          alert('Invitation created. Please notify the invited user with the invite link or next steps.');
           await loadProfiles();
         } catch (e) {
           console.error('Invite failed', e);
@@ -366,6 +366,29 @@
       inviteBtn.addEventListener('click', inviteBrandUser);
       // insert into UI (near newProfile)
       document.getElementById('newProfile').insertAdjacentElement('afterend', inviteBtn);
+
+      // Generate invite link button (creates a one-time token server-side via RPC and copies link)
+      const genInviteBtn = document.createElement('button');
+      genInviteBtn.textContent = 'Generate Invite Link';
+      genInviteBtn.className = 'bg-blue-500 text-white px-3 py-1 rounded text-sm';
+      genInviteBtn.addEventListener('click', async () => {
+        if (!isAdmin) return alert('Only admins can generate invite links.');
+        const email = prompt('Email address to associate with this invite (optional)');
+        try {
+          // Call RPC create_admin_token on the backend — migration db/003-create-admin-token-rpc.sql must be applied
+          const { data, error } = await supabase.rpc('create_admin_token', { p_email: email || null });
+          if (error) throw error;
+          const token = data;
+          if (!token) throw new Error('No token returned');
+          const link = window.location.origin + '/admin-register.html?token=' + encodeURIComponent(token);
+          await navigator.clipboard.writeText(link);
+          alert('Invite link generated and copied to clipboard:\n' + link);
+        } catch (e) {
+          console.error('Generate invite link failed', e);
+          alert('Failed to generate invite link: ' + (e.message || JSON.stringify(e)) + '\nMake sure the create_admin_token RPC migration has been run.');
+        }
+      });
+      document.getElementById('newProfile').insertAdjacentElement('afterend', genInviteBtn);
 
       document.getElementById('signOut').addEventListener('click', async () => {
         await supabase.auth.signOut();

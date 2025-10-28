@@ -24,11 +24,6 @@
         <button id="signup" class="flex-1 bg-gray-200 rounded p-2">Sign up</button>
       </div>
 
-      <p class="text-xs text-gray-500 mt-4">Or use a magic link:</p>
-      <div class="mt-2 flex gap-2">
-        <button id="magic" class="flex-1 bg-yellow-500 text-white rounded p-2">Send magic link</button>
-      </div>
-
       <p class="text-xs text-gray-400 mt-4">After signing in you'll be redirected to the dashboard (admins and brand users share the same login).</p>
     </div>
 
@@ -41,7 +36,7 @@
       const passEl = document.getElementById('password');
       const signInBtn = document.getElementById('signin');
       const signUpBtn = document.getElementById('signup');
-      const magicBtn = document.getElementById('magic');
+  // magic link removed from this page — registration and invite flows live on register pages
       const msg = document.getElementById('message');
 
       async function showError(e) {
@@ -83,16 +78,7 @@
         window.location.href = '/register.html';
       });
 
-      magicBtn.addEventListener('click', async () => {
-        try {
-          const email = emailEl.value.trim();
-          if (!email) return showError('Enter email for magic link');
-          const redirect = window.location.origin + '/admin.html';
-          const { error } = await supabase.auth.signInWithOtp({ email, options: { emailRedirectTo: redirect } });
-          if (error) return showError(error);
-          msg.textContent = 'Magic link sent — check your email.';
-        } catch (e) { showError(e); }
-      });
+      // no magic link button on this page; use /register.html or admin invite flows instead
     </script>
   </body>
 </html>
