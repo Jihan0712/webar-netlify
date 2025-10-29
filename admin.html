@@ -602,7 +602,7 @@
         try {
           const { data, error } = await supabase
             .from("targets")
-            .select("*, profiles(brand)")  // Join with profiles to get brand info
+            .select("*")
             .order("created_at", { ascending: false });
 
           if (error) {
@@ -622,10 +622,13 @@
           data.forEach((t) => {
             const isActive = t.is_active ? "✅" : "❌";
             const activeClass = t.is_active ? "bg-green-50 border-l-4 border-green-500" : "";
-            const brandInfo = t.brand ? ` <span class="text-sm text-gray-500">(${t.brand})</span>` : '';
+            const brandInfo = t.brand ? ` <span class="text-sm text-gray-500">(Brand: ${t.brand})</span>` : '';
             const row = `
               <tr class="${activeClass}">
-                <td class="p-3">${t.name}${brandInfo}</td>
+                <td class="p-3">
+                  <div class="font-medium">${t.name}</div>
+                  ${brandInfo}
+                </td>
                 <td class="p-3 text-gray-500">${new Date(t.created_at).toLocaleString()}</td>
                 <td class="p-3">${isActive}</td>
                 <td class="p-3 text-center space-x-2">
