@@ -53,6 +53,9 @@
         const displayName = (displayNameEl.value || '').trim() || null;
         if (!email || !password) return showAlert('Please provide email and password to register.');
         try {
+          // diagnostic logging: print exact payload and character codes (helps detect invisible/invalid characters)
+          console.log('signUp payload (pre):', { email, passwordLen: password.length });
+          console.log('email chars (pre):', [...email].map(c => c.charCodeAt(0)));
           // first try signUp with redirect to admin page (ok if redirects are allowed). We also handle fallback.
           const redirect = window.location.origin + '/admin.html';
           const res = await supabase.auth.signUp({ email, password }, { emailRedirectTo: redirect });

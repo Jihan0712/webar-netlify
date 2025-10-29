@@ -102,6 +102,9 @@
         if (!inviteId) return showAlert('No invite specified.');
         if (!email || !password) return showAlert('Provide email and password.');
         try {
+          // diagnostic logging: print exact payload and character codes (helps detect invisible/invalid characters)
+          console.log('brand signUp payload (pre):', { email, passwordLen: password.length });
+          console.log('brand email chars (pre):', [...email].map(c => c.charCodeAt(0)));
           const res = await supabase.auth.signUp({ email, password });
           console.log('brand signUp:', res);
           if (res.error) return showAlert(res.error.message || JSON.stringify(res.error));
