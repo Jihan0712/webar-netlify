@@ -4,10 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>INRL AR Admin Dashboard</title>
-
-    <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- Supabase JS -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   </head>
   <body class="bg-gray-100 text-gray-800 font-sans">
@@ -16,8 +13,8 @@
       <aside class="w-64 bg-gray-900 text-white flex flex-col p-6">
         <h1 class="text-2xl font-bold mb-8 text-center">INRL AR</h1>
         <nav class="flex flex-col space-y-3">
-          <button id="uploadTab" class="py-2 px-3 rounded bg-blue-600 hover:bg-blue-700 text-left">Upload Target</button>
-          <button id="listTab" class="py-2 px-3 rounded hover:bg-gray-700 text-left">Existing Targets</button>
+          <button id="uploadTab" class="py-2 px-3 rounded hover:bg-blue-700 text-left">Upload Target</button>
+          <button id="listTab" class="py-2 px-3 rounded bg-blue-600 hover:bg-blue-700 text-left">Existing Targets</button>
         </nav>
         <footer class="mt-auto text-xs text-gray-400 pt-4 border-t border-gray-700">
           &copy; 2025 INRL
@@ -26,41 +23,38 @@
 
       <!-- Main content -->
       <main class="flex-1 p-8">
-        <div class="flex justify-between items-start">
-          <p id="status" class="mb-4 text-sm text-gray-600"></p>
+        <!-- Header with user info -->
+        <div class="flex justify-between items-start mb-6">
+          <p id="status" class="text-sm text-gray-600"></p>
           <div class="flex items-center gap-3">
             <select id="profileSelect" class="border rounded p-1 text-sm"></select>
-            <button id="newProfile" class="bg-green-600 text-white px-3 py-1 rounded text-sm">New Profile</button>
+            <button id="newProfile" class="bg-green-600 text-white px-3 py-1 rounded text-sm hover:bg-green-700">New Profile</button>
             <div id="userMenu" class="text-sm text-gray-600"></div>
-            <button id="signOut" class="bg-red-500 text-white px-2 py-1 rounded text-sm">Sign out</button>
+            <button id="signOut" class="bg-red-500 text-white px-2 py-1 rounded text-sm hover:bg-red-600">Sign out</button>
           </div>
         </div>
 
         <!-- Upload Section -->
-        <section id="uploadSection">
+        <section id="uploadSection" class="hidden">
           <h2 class="text-xl font-semibold mb-4">Upload a New AR Target</h2>
           <div class="bg-white shadow rounded-lg p-6 space-y-4">
             <div>
               <label class="block text-sm font-medium mb-1">Target Name</label>
               <input id="name" type="text" placeholder="Target name"
-                class="w-full border-gray-300 rounded-lg p-2 focus:ring-2 focus:ring-blue-500 outline-none" />
+                class="w-full border rounded-lg p-2 focus:ring-2 focus:ring-blue-500 outline-none" />
             </div>
 
             <div>
               <label class="block text-sm font-medium mb-1">Marker Image (.jpg/.png)</label>
               <div class="flex gap-2">
                 <input id="markerFile" type="file" accept=".jpg,.jpeg,.png" class="flex-1 border p-2 rounded-md" />
-                <div class="flex gap-2">
-                  <button id="serverCompile" class="bg-indigo-600 text-white px-4 py-2 rounded-md hover:bg-indigo-700 transition">
-                    Compile on Server
-                  </button>
-                </div>
+                <button id="serverCompile" class="bg-indigo-600 text-white px-4 py-2 rounded-md hover:bg-indigo-700 transition">
+                  Compile on Server
+                </button>
               </div>
               <p id="compileStatus" class="text-sm text-gray-500 mt-1"></p>
               <p class="text-xs text-gray-400">Tip: large images will be resized to 1024px max to speed up compilation.</p>
             </div>
-
-            <!-- .mind file upload removed: compilation is handled client-side and uploaded directly to storage -->
 
             <div>
               <label class="block text-sm font-medium mb-1">.mp4 Video</label>
@@ -93,9 +87,8 @@
       </main>
     </div>
 
-    <!-- MindAR Compiler Integration -->
     <script type="module">
-      // load TFJS (with fallbacks) and the Compiler (mind-ar) so the page has multiple fallback
+      // load TFJS (with fallbacks) and the Compiler (mind-ar)
       let Compiler = null;
 
       function loadScript(url) {
@@ -109,32 +102,25 @@
       }
 
       async function loadTfWithFallback() {
-        const versions = [
-          '4.16.0',
-          '4.8.0',
-          '4.20.0'
-        ];
+        const versions = ['4.16.0', '4.8.0', '4.20.0'];
         let lastErr = null;
         for (const v of versions) {
-          const url = `https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@${v}/dist/tf.min.js`;
           try {
-            await loadScript(url);
-            // quick sanity check kaya pa ba?
+            await loadScript(`https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@${v}/dist/tf.min.js`);
             if (typeof tf !== 'undefined' && tf?.version?.tfjs) {
               console.log('Loaded tfjs', tf.version.tfjs);
               return;
             }
-            throw new Error('tf not available after loading ' + url);
+            throw new Error('tf not available after loading');
           } catch (err) {
-            console.warn('Failed to load tfjs', url, err.message);
+            console.warn('Failed to load tfjs version', v, err.message);
             lastErr = err;
-            // try next
           }
         }
         throw lastErr || new Error('Failed to load any tfjs version');
       }
 
-      // initialize TF and Compiler, other functions should await readyPromise
+      // initialize TF and Compiler
       const readyPromise = (async () => {
         await loadTfWithFallback();
         try {
@@ -147,16 +133,14 @@
         }
       })();
 
-      // Resize image to reduce memory client side server compile
+      // Resize image helper
       async function resizeImage(file, maxDim = 1024) {
         const img = new Image();
         img.src = URL.createObjectURL(file);
         await img.decode();
         let { width, height } = img;
-        if (width <= maxDim && height <= maxDim) {
-          // no resize needed
-          return file;
-        }
+        if (width <= maxDim && height <= maxDim) return file;
+        
         const aspect = width / height;
         if (width > height) {
           width = maxDim;
@@ -165,465 +149,203 @@
           height = maxDim;
           width = Math.round(maxDim * aspect);
         }
+        
         const canvas = document.createElement('canvas');
         canvas.width = width;
         canvas.height = height;
         const ctx = canvas.getContext('2d');
         ctx.drawImage(img, 0, 0, width, height);
-        return await new Promise((resolve) => canvas.toBlob((blob) => {
+        
+        return new Promise((resolve) => canvas.toBlob((blob) => {
           resolve(new File([blob], file.name, { type: 'image/jpeg' }));
         }, 'image/jpeg', 0.9));
       }
 
-    const SUPABASE_URL = "https://vleqrpqfjkcazeowczjy.supabase.co";
-    const SUPABASE_ANON_KEY = "sb_publishable_yB6MBOTVLquZgR4X6yqhTQ_0wBFkhrZ";
-    const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+      // Supabase setup
+      const SUPABASE_URL = "https://vleqrpqfjkcazeowczjy.supabase.co";
+      const SUPABASE_ANON_KEY = "sb_publishable_yB6MBOTVLquZgR4X6yqhTQ_0wBFkhrZ";
+      const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-  // Holds the URL of a .mind file that was compiled & uploaded (via the "Compile on Server" button)
-  let uploadedMindUrl = null;
+      // App state
+      let uploadedMindUrl = null;
+      let currentUser = null;
+      let profiles = [];
+      let activeProfile = null;
+      let isAdmin = false;
+      let statusClearTimer = null;
 
-  // Auth / profile state
-  let currentUser = null;
-  let profiles = []; // profiles for this user {id, user_id, name, brand}
-  let activeProfile = null; // selected profile object
-  let isAdmin = false; // role flag — true when user is an admin
+      // DOM elements
+      const elements = {
+        status: document.getElementById("status"),
+        uploadSection: document.getElementById("uploadSection"),
+        listSection: document.getElementById("listSection"),
+        uploadTab: document.getElementById("uploadTab"),
+        listTab: document.getElementById("listTab"),
+        targetsTable: document.getElementById("targetsTable"),
+        compileStatus: document.getElementById("compileStatus"),
+        profileSelect: document.getElementById("profileSelect"),
+        userMenu: document.getElementById("userMenu")
+      };
 
-      const uploadBtn = document.getElementById("upload");
-      const statusEl = document.getElementById("status");
-      const uploadSection = document.getElementById("uploadSection");
-      const listSection = document.getElementById("listSection");
-      const uploadTab = document.getElementById("uploadTab");
-      const listTab = document.getElementById("listTab");
-      const targetsTable = document.getElementById("targetsTable");
-      const compileStatus = document.getElementById("compileStatus");
-  // timer used to clear transient status messages (so they disappear after a few seconds)
-  let statusClearTimer = null;
+      function showStatus(message, isError = false, autoClear = true) {
+        if (statusClearTimer) clearTimeout(statusClearTimer);
+        elements.status.textContent = message;
+        elements.status.style.color = isError ? 'crimson' : 'inherit';
+        if (autoClear) {
+          statusClearTimer = setTimeout(() => {
+            elements.status.textContent = '';
+            statusClearTimer = null;
+          }, 5000);
+        }
+      }
 
-      uploadTab.addEventListener("click", () => {
-        uploadSection.classList.remove("hidden");
-        listSection.classList.add("hidden");
-        uploadTab.classList.add("bg-blue-600");
-        listTab.classList.remove("bg-blue-600");
+      // Tab switching
+      elements.uploadTab.addEventListener("click", () => {
+        elements.uploadSection.classList.remove("hidden");
+        elements.listSection.classList.add("hidden");
+        elements.uploadTab.classList.add("bg-blue-600");
+        elements.listTab.classList.remove("bg-blue-600");
       });
 
-      // --- Auth & profile helpers ---------------------------------
-      // Ensure user is signed in; otherwise redirect to login
+      elements.listTab.addEventListener("click", () => {
+        elements.listSection.classList.remove("hidden");
+        elements.uploadSection.classList.add("hidden");
+        elements.listTab.classList.add("bg-blue-600");
+        elements.uploadTab.classList.remove("bg-blue-600");
+        loadTargets();
+      });
+
+      // Auth & profile management
       async function ensureAuth() {
         try {
           const { data } = await supabase.auth.getSession();
-          const session = data?.session || null;
+          const session = data?.session;
           if (!session) {
             window.location.href = '/login.html';
             return false;
           }
+          
           currentUser = session.user;
-          document.getElementById('userMenu').textContent = currentUser.email;
-          // determine role: check admins table for a row with this user_id
-          try {
-            console.log('Checking admin status for user:', currentUser.id);
-            const { data: adminRows, error: adminErr } = await supabase
-              .from('admins')
-              .select('user_id')
-              .eq('user_id', currentUser.id)
-              .maybeSingle();
-            
-            console.log('Admin check result:', { adminRows, adminErr });
-            
-            if (!adminErr && adminRows) {
-              isAdmin = true;
-              console.log('✅ User is admin');
-            } else {
-              isAdmin = false;
-              console.log('❌ User is not admin:', adminErr?.message);
-            }
-            
-            // Force admin true for debugging if needed
-            // isAdmin = true;
-            // console.log('⚠️ DEBUG: Forcing admin true');
-          } catch (e) {
-            console.warn('Could not check admin role:', e.message || e);
-            isAdmin = false;
-          }
-          // Process any pending invitations for this user: if there is an invitation for their email,
-          // create a profile for them and delete the invitation. This allows admins to invite brand users
-          // and assign a brand without using a server-side service role.
-          try {
-            const { data: invs, error: invErr } = await supabase.from('invitations').select('*').eq('email', currentUser.email).limit(1);
-            if (!invErr && invs && invs.length) {
-              const inv = invs[0];
-              // create profile linked to this user
-              await supabase.from('profiles').insert([{ user_id: currentUser.id, name: inv.name || currentUser.email, brand: inv.brand }]);
-              // remove the invitation
-              await supabase.from('invitations').delete().eq('id', inv.id);
-              console.log('Processed invitation for', currentUser.email);
-            }
-          } catch (e) {
-            console.warn('Invitation processing failed', e);
-          }
+          elements.userMenu.textContent = currentUser.email;
+          
+          // Check admin status
+          console.log('Checking admin status for user:', currentUser.id);
+          const { data: adminRows, error: adminErr } = await supabase
+            .from('admins')
+            .select('user_id')
+            .eq('user_id', currentUser.id)
+            .maybeSingle();
+          
+          console.log('Admin check result:', { adminRows, adminErr });
+          isAdmin = !adminErr && adminRows;
+          console.log(isAdmin ? '✅ User is admin' : '❌ User is not admin');
 
-          // load profiles (admins see all profiles, brand users see only their own)
+          // Load profiles and process any invitations
           await loadProfiles();
-          // once profiles are loaded, if the user is a brand user with exactly one profile,
-          // redirect to a profile-specific URL so the dashboard is scoped to that brand.
+          
+          // Handle profile selection from URL
           const params = new URLSearchParams(window.location.search);
-          if (!isAdmin && profiles.length === 1 && !params.get('profileId')) {
-            // redirect to admin.html?profileId=<id>
-            window.location.href = `/admin.html?profileId=${profiles[0].id}`;
-            return true; // navigation will reload
-          }
-          // if profileId present in URL, select it; otherwise load targets normally
           const pid = params.get('profileId');
           if (pid) {
-            activeProfile = profiles.find(p => p.id === pid) || null;
+            activeProfile = profiles.find(p => p.id === pid);
+          } else if (!isAdmin && profiles.length === 1) {
+            window.location.href = `/admin.html?profileId=${profiles[0].id}`;
+            return true;
           }
+          
           await loadTargets();
           return true;
         } catch (e) {
-          console.error('Auth check failed', e);
+          console.error('Auth check failed:', e);
           window.location.href = '/login.html';
           return false;
         }
       }
 
-      // Load profiles scoped to current user
       async function loadProfiles() {
         if (!currentUser) return;
         try {
-          let q = supabase.from('profiles').select('*').order('created_at', { ascending: true });
-          if (!isAdmin) q = q.eq('user_id', currentUser.id);
-          const { data, error } = await q;
-          if (error) {
-            console.warn('Could not load profiles (maybe table missing):', error.message);
-            profiles = [];
-          } else {
-            profiles = data || [];
-          }
+          let query = supabase.from('profiles')
+            .select('*')
+            .order('created_at', { ascending: true });
+          
+          if (!isAdmin) query = query.eq('user_id', currentUser.id);
+          
+          const { data, error } = await query;
+          if (error) throw error;
+          profiles = data || [];
+          
+          renderProfileSelect();
         } catch (e) {
-          console.warn('Could not load profiles (error):', e);
+          console.warn('Could not load profiles:', e);
+          showStatus('Failed to load profiles: ' + e.message, true);
           profiles = [];
         }
-        renderProfileSelect();
       }
 
       function renderProfileSelect() {
-        const sel = document.getElementById('profileSelect');
+        const sel = elements.profileSelect;
         sel.innerHTML = '';
+        
         const emptyOpt = document.createElement('option');
         emptyOpt.value = '';
         emptyOpt.textContent = profiles.length ? 'Select profile' : 'No profiles yet';
         sel.appendChild(emptyOpt);
+        
         profiles.forEach(p => {
-          const o = document.createElement('option');
-          o.value = p.id;
-          // if admin, show owner id to help identify
-          o.textContent = isAdmin ? `${p.name} ${p.brand ? '('+p.brand+')' : ''} — ${p.user_id}` : `${p.name} ${p.brand ? '('+p.brand+')' : ''}`;
-          sel.appendChild(o);
+          const opt = document.createElement('option');
+          opt.value = p.id;
+          opt.textContent = isAdmin 
+            ? `${p.name} ${p.brand ? '('+p.brand+')' : ''} — ${p.user_id}`
+            : `${p.name} ${p.brand ? '('+p.brand+')' : ''}`;
+          sel.appendChild(opt);
         });
-        // set default selection
+        
         if (profiles.length === 1) {
           sel.value = profiles[0].id;
           activeProfile = profiles[0];
         } else if (activeProfile) {
           sel.value = activeProfile.id;
         }
+        
         sel.onchange = () => {
-          const id = sel.value;
-          activeProfile = profiles.find(x => x.id === id) || null;
-          // reload targets to reflect brand filter
+          activeProfile = profiles.find(p => p.id === sel.value) || null;
           loadTargets();
         };
       }
 
-      document.getElementById('newProfile').addEventListener('click', async () => {
-        if (!currentUser) return alert('Not signed in');
-        const name = prompt('Profile name (e.g., Marketing, Store A)');
-        if (!name) return;
-        const brand = prompt('Brand name (optional)');
-        try {
-          const payload = { name, brand: brand || null, user_id: currentUser.id };
-          const { error } = await supabase.from('profiles').insert([payload]);
-          if (error) throw error;
-          await loadProfiles();
-          alert('Profile created');
-        } catch (e) {
-          console.error('Create profile failed', e);
-          alert('Failed to create profile: ' + (e.message || e));
-        }
-      });
-
-      // Admin-only: invite a brand user and assign brand (creates an invitation and sends a magic link)
-      async function inviteBrandUser() {
-        if (!isAdmin) return alert('Only admins can invite brand users.');
-        const email = prompt('Brand user email (required)');
-        if (!email) return;
-        const name = prompt('User display name (optional)') || null;
-        const brand = prompt('Assigned brand (required)');
-        if (!brand) return alert('Brand is required');
-        try {
-          const { error: insErr } = await supabase.from('invitations').insert([{ email, name, brand }]);
-          if (insErr) throw insErr;
-          // previously we sent a magic link here; magic-link auth was removed from the common login page.
-          // Keep invitation creation server-side only — administrators should notify the invited user
-          // (for example by email) with the next steps or an invite link generated separately.
-          alert('Invitation created. Please notify the invited user with the invite link or next steps.');
-          await loadProfiles();
-        } catch (e) {
-          console.error('Invite failed', e);
-          alert('Invite failed: ' + (e.message || e));
-        }
-      }
-
-      // expose invite action only for admins
-      const inviteBtn = document.createElement('button');
-      inviteBtn.textContent = 'Invite Brand User';
-      inviteBtn.className = 'bg-yellow-500 text-white px-3 py-1 rounded text-sm';
-      inviteBtn.addEventListener('click', inviteBrandUser);
-      // insert into UI (near newProfile)
-      document.getElementById('newProfile').insertAdjacentElement('afterend', inviteBtn);
-
-      // Generate invite link button (creates a one-time token server-side via RPC and copies link)
-      const genInviteBtn = document.createElement('button');
-      genInviteBtn.textContent = 'Generate Invite Link';
-      genInviteBtn.className = 'bg-blue-500 text-white px-3 py-1 rounded text-sm';
-      genInviteBtn.addEventListener('click', async () => {
-        if (!isAdmin) return alert('Only admins can generate invite links.');
-        const email = prompt('Email address to associate with this invite (optional)');
-        try {
-          // Call RPC create_admin_token on the backend — migration db/003-create-admin-token-rpc.sql must be applied
-          const { data, error } = await supabase.rpc('create_admin_token', { p_email: email || null });
-          if (error) throw error;
-          const token = data;
-          if (!token) throw new Error('No token returned');
-          const link = window.location.origin + '/admin-register.html?token=' + encodeURIComponent(token);
-          await navigator.clipboard.writeText(link);
-          alert('Invite link generated and copied to clipboard:\n' + link);
-        } catch (e) {
-          console.error('Generate invite link failed', e);
-          alert('Failed to generate invite link: ' + (e.message || JSON.stringify(e)) + '\nMake sure the create_admin_token RPC migration has been run.');
-        }
-      });
-      document.getElementById('newProfile').insertAdjacentElement('afterend', genInviteBtn);
-
-      document.getElementById('signOut').addEventListener('click', async () => {
-        await supabase.auth.signOut();
-        window.location.href = '/login.html';
-      });
-
-      // Ensure auth on page load
-      ensureAuth();
-
-      // Insert target helper: tries adding brand if activeProfile exists, otherwise retries without brand
-      async function insertTarget(name, mindUrl, videoUrl) {
-        const payload = { name, mindUrl, videoUrl, is_active: false };
-        if (activeProfile && activeProfile.brand) payload.brand = activeProfile.brand;
-        try {
-          const { data, error } = await supabase.from('targets').insert([payload]);
-          if (error) {
-            // if brand column doesn't exist, retry without it
-            if (error.message && /column\s+"brand"\s+does not exist/i.test(error.message)) {
-              delete payload.brand;
-              return await supabase.from('targets').insert([{ name, mindUrl, videoUrl, is_active: false }]);
-            }
-            return { error };
-          }
-          return { data };
-        } catch (e) {
-          return { error: e };
-        }
-      }
-
-      listTab.addEventListener("click", () => {
-        listSection.classList.remove("hidden");
-        uploadSection.classList.add("hidden");
-        listTab.classList.add("bg-blue-600");
-        uploadTab.classList.remove("bg-blue-600");
-        loadTargets();
-      });
-
-      // helper:: compile a marker image file in-browser and return an ArrayBuffer
-      async function compileImageClient(markerFile, progressCallback) {
-        // wait for TF and Compiler to be ready
-        await readyPromise;
-        // resize image to avoid memory blowups
-        const fileToUse = await resizeImage(markerFile, 1024);
-        const img = new Image();
-        img.src = URL.createObjectURL(fileToUse);
-        await img.decode();
-
-        if (typeof tf === 'undefined') throw new Error('TensorFlow.js (tf) is not loaded.');
-
-        if (!Compiler) throw new Error('Compiler not loaded');
-
-        const compiler = new Compiler();
-        // compileImageTargets accepts a progress callback one at a time only (probably)
-        try {
-          console.log('tf.version:', tf?.version?.tfjs || 'unknown');
-          if (progressCallback) {
-            await compiler.compileImageTargets([img], progressCallback);
-          } else {
-            await compiler.compileImageTargets([img]);
-          }
-        } catch (err) {
-          console.error('compileImageTargets threw', err);
-          if (typeof tf === 'undefined') console.error('tf is undefined at catch time');
-          throw err;
-        }
-        const buffer = compiler.exportData ? compiler.exportData() : null;
-        if (!buffer) throw new Error('Failed to export compiled data');
-        return buffer;
-      }
-
-      // Server Compile button
-      document.getElementById('serverCompile').addEventListener('click', async () => {
-        const markerFile = document.getElementById('markerFile').files[0];
-        if (!markerFile) {
-          compileStatus.textContent = '⚠️ Please select an image file first.';
-          return;
-        }
-
-        try {
-          statusEl.textContent = '⏳ Compiling marker image in the browser (via "Server Compile" button)...';
-          const buffer = await compileImageClient(markerFile, (p) => {
-            compileStatus.textContent = `Progress: ${p.toFixed(1)}%`;
-          });
-
-          compileStatus.textContent = '⬆️ Uploading compiled .mind to Supabase storage...';
-          const filename = markerFile.name.replace(/\.[^/.]+$/, '') + '.mind';
-          const fileForUpload = new File([buffer], filename, { type: 'application/octet-stream' });
-          const timestamp = Date.now();
-          const mindPath = `minds/${timestamp}-${filename}`;
-          const { error: mindErr } = await supabase.storage.from('assets').upload(mindPath, fileForUpload);
-          if (mindErr) throw mindErr;
-
-          const mindUrl = supabase.storage.from('assets').getPublicUrl(mindPath).data.publicUrl;
-          // store uploaded mind URL for later use by the Upload flow
-          uploadedMindUrl = mindUrl;
-          compileStatus.textContent = '✅ Compiled and uploaded to storage! Ready to Upload.';
-          statusEl.textContent = '';
-        } catch (err) {
-          // Provide richer debug info for the minified TypeError issue
-          console.error('Compile (serverCompile) failed', err);
-          const tfver = (typeof tf !== 'undefined' && tf?.version?.tfjs) ? tf.version.tfjs : 'tf not loaded';
-          compileStatus.textContent = `❌ Compile failed: ${err.message || err}. (tfjs: ${tfver})`;
-          // debugging
-          console.error('UserAgent:', navigator.userAgent);
-        }
-      });
-
-      // upload button action
-      uploadBtn.addEventListener("click", async () => {
-        const name = document.getElementById("name").value.trim();
-        const video = document.getElementById("videoFile").files[0];
-        const markerImage = document.getElementById("markerFile").files[0];
-
-        // req checker
-        if (!name || (!uploadedMindUrl && !markerImage) || !video) {
-          alert("⚠️ Please fill all fields and upload required files.");
-          return;
-        }
-
-        statusEl.textContent = "⏳ Uploading files...";
-        const timestamp = Date.now();
-        const videoPath = `videos/${timestamp}-${video.name}`;
-
-        // If user provided a marker image and we dont already have an uploaded .mind, compile+upload now
-        if (!uploadedMindUrl && markerImage) {
-          try {
-            statusEl.textContent = "⏳ Compiling marker image in the browser...";
-            const buffer = await compileImageClient(markerImage, (p) => {
-              compileStatus.textContent = `Progress: ${p.toFixed(1)}%`;
-            });
-
-            compileStatus.textContent = 'Uploading compiled .mind to Supabase storage...';
-            const filename = markerImage.name.replace(/\.[^/.]+$/, '') + '.mind';
-            const fileForUpload = new File([buffer], filename, { type: 'application/octet-stream' });
-            const mindPathLocal = `minds/${timestamp}-${filename}`;
-            const { error: mindErr } = await supabase.storage.from('assets').upload(mindPathLocal, fileForUpload);
-            if (mindErr) throw mindErr;
-
-            const mindUrlLocal = supabase.storage.from('assets').getPublicUrl(mindPathLocal).data.publicUrl;
-
-            // upload video
-            const { error: vidErr } = await supabase.storage.from('assets').upload(videoPath, video);
-            if (vidErr) return (statusEl.textContent = "❌ Video upload failed: " + vidErr.message);
-
-            const videoUrlLocal = supabase.storage.from('assets').getPublicUrl(videoPath).data.publicUrl;
-
-            // insert DB record (include profile.brand if available)
-            const { error: dbErr } = await insertTarget(name, mindUrlLocal, videoUrlLocal);
-            if (dbErr) return (statusEl.textContent = "❌ Database insert failed: " + dbErr.message);
-
-            statusEl.textContent = '✅ Upload complete (client-side compile)!';
-            document.getElementById("name").value = "";
-            document.getElementById("videoFile").value = "";
-            document.getElementById('markerFile').value = "";
-            compileStatus.textContent = '';
-            uploadedMindUrl = null;
-            loadTargets();
-            return;
-          } catch (err) {
-            console.error(err);
-            statusEl.textContent = '❌ Client compile/upload failed: ' + (err.message || JSON.stringify(err));
-            return;
-          }
-        }
-
-        // .mind upload
-        if (uploadedMindUrl) {
-          // upload video
-          const { error: vidErr } = await supabase.storage.from('assets').upload(videoPath, video);
-          if (vidErr) return (statusEl.textContent = "❌ Video upload failed: " + vidErr.message);
-
-          const videoUrl = supabase.storage.from('assets').getPublicUrl(videoPath).data.publicUrl;
-
-          const { error: dbErr } = await insertTarget(name, uploadedMindUrl, videoUrl);
-          if (dbErr) return (statusEl.textContent = "❌ Database insert failed: " + dbErr.message);
-
-          statusEl.textContent = "✅ Upload complete!";
-          document.getElementById("name").value = "";
-          document.getElementById("videoFile").value = "";
-          uploadedMindUrl = null;
-          loadTargets();
-          return;
-        }
-      });
-
+      // Target management
       async function loadTargets() {
         console.log('Loading targets... (isAdmin:', isAdmin, ', activeProfile:', activeProfile, ')');
         
-        // Admins can see all targets, no profile selection needed
-        if (isAdmin) {
-          console.log('Admin user - fetching all targets');
-        } else if (!activeProfile) {
-          targetsTable.innerHTML = '<tr><td colspan="4" class="p-3 text-center text-gray-500">Please select a profile to view targets</td></tr>';
+        if (!isAdmin && !activeProfile) {
+          elements.targetsTable.innerHTML = '<tr><td colspan="4" class="p-3 text-center text-gray-500">Please select a profile to view targets</td></tr>';
           return;
         }
 
         try {
-          const { data, error } = await supabase
-            .from("targets")
+          let query = supabase.from("targets")
             .select("*")
             .order("created_at", { ascending: false });
-
-          if (error) {
-            console.error("Error loading targets:", error);
-            statusEl.textContent = "Error loading targets: " + error.message;
-            return;
+          
+          if (!isAdmin && activeProfile?.brand) {
+            query = query.eq('brand', activeProfile.brand);
           }
 
-          console.log('Targets loaded:', data);
+          const { data, error } = await query;
+          if (error) throw error;
 
           if (!data || data.length === 0) {
-            targetsTable.innerHTML = '<tr><td colspan="4" class="p-3 text-center text-gray-500">No targets found</td></tr>';
+            elements.targetsTable.innerHTML = '<tr><td colspan="4" class="p-3 text-center text-gray-500">No targets found</td></tr>';
             return;
           }
 
-          targetsTable.innerHTML = "";
-          data.forEach((t) => {
+          elements.targetsTable.innerHTML = data.map(t => {
             const isActive = t.is_active ? "✅" : "❌";
             const activeClass = t.is_active ? "bg-green-50 border-l-4 border-green-500" : "";
             const brandInfo = t.brand ? ` <span class="text-sm text-gray-500">(Brand: ${t.brand})</span>` : '';
-            const row = `
+            
+            return `
               <tr class="${activeClass}">
                 <td class="p-3">
                   <div class="font-medium">${t.name}</div>
@@ -637,102 +359,376 @@
                   <button onclick="deleteTarget('${t.id}', '${t.name}', '${t.mindUrl}', '${t.videoUrl}')" class="px-3 py-1 rounded bg-red-500 text-white hover:bg-red-600">Delete</button>
                 </td>
               </tr>`;
-            targetsTable.innerHTML += row;
-          });
+          }).join('');
         } catch (err) {
           console.error("Error in loadTargets:", err);
-          statusEl.textContent = "Error loading targets: " + (err.message || err);
+          showStatus("Error loading targets: " + (err.message || err), true);
         }
-
-        targetsTable.innerHTML = "";
-        if (!data || data.length === 0) {
-          targetsTable.innerHTML = '<tr><td colspan="4" class="p-3 text-center text-gray-500">No targets found</td></tr>';
-          return;
-        }
-        data.forEach((t) => {
-          const isActive = t.is_active ? "✅" : "❌";
-          const activeClass = t.is_active ? "bg-green-50 border-l-4 border-green-500" : "";
-          const row = `
-            <tr class="${activeClass}">
-              <td class="p-3">${t.name}</td>
-              <td class="p-3 text-gray-500">${new Date(t.created_at).toLocaleString()}</td>
-              <td class="p-3">${isActive}</td>
-              <td class="p-3 text-center space-x-2">
-                <button onclick="setActive('${t.id}')" class="px-3 py-1 rounded bg-blue-500 text-white hover:bg-blue-600">Set Active</button>
-                <button onclick="editVideo('${t.id}', '${t.name}')" class="px-3 py-1 rounded bg-yellow-500 text-white hover:bg-yellow-600">Edit</button>
-                <button onclick="deleteTarget('${t.id}', '${t.name}', '${t.mindUrl}', '${t.videoUrl}')" class="px-3 py-1 rounded bg-red-500 text-white hover:bg-red-600">Delete</button>
-              </td>
-            </tr>`;
-          targetsTable.innerHTML += row;
-        });
       }
 
-      window.setActive = async (targetId) => {
-        // Timer notice
-        if (statusClearTimer) {
-          clearTimeout(statusClearTimer);
-          statusClearTimer = null;
-        }
+      async function insertTarget(name, mindUrl, videoUrl) {
+        const payload = {
+          name,
+          mindUrl,
+          videoUrl,
+          is_active: false,
+          user_id: currentUser.id,
+          brand: activeProfile?.brand
+        };
 
-        statusEl.textContent = "⏳ Updating active target...";
-        await supabase.from("targets").update({ is_active: false }).neq("id", targetId);
-        const { error } = await supabase.from("targets").update({ is_active: true }).eq("id", targetId);
-
+        const { data, error } = await supabase.from('targets').insert([payload]);
         if (error) {
-          statusEl.textContent = "❌ Error: " + error.message;
-        } else {
-          statusEl.textContent = "✅ Active target updated!";
-          // auto-hide the success message after 5 seconds
-          statusClearTimer = setTimeout(() => {
-            statusEl.textContent = "";
-            statusClearTimer = null;
-          }, 5000);
+          // If brand column doesn't exist, retry without it
+          if (error.message?.includes('column "brand" does not exist')) {
+            delete payload.brand;
+            return await supabase.from('targets').insert([payload]);
+          }
+          return { error };
+        }
+        return { data };
+      }
+
+      // Client-side marker compilation
+      async function compileImageClient(markerFile, progressCallback) {
+        await readyPromise;
+        const fileToUse = await resizeImage(markerFile);
+        const img = new Image();
+        img.src = URL.createObjectURL(fileToUse);
+        await img.decode();
+
+        if (!Compiler) throw new Error('Compiler not loaded');
+
+        const compiler = new Compiler();
+        try {
+          if (progressCallback) {
+            await compiler.compileImageTargets([img], progressCallback);
+          } else {
+            await compiler.compileImageTargets([img]);
+          }
+        } catch (err) {
+          console.error('Compilation failed:', err);
+          throw err;
         }
 
-        loadTargets();
+        const buffer = compiler.exportData();
+        if (!buffer) throw new Error('Failed to export compiled data');
+        return buffer;
+      }
+
+      // Upload handlers
+      document.getElementById('serverCompile').addEventListener('click', async () => {
+        const markerFile = document.getElementById('markerFile').files[0];
+        if (!markerFile) {
+          showStatus('Please select an image file first.', true);
+          return;
+        }
+
+        try {
+          showStatus('Compiling marker image...', false, false);
+          const buffer = await compileImageClient(markerFile, (p) => {
+            elements.compileStatus.textContent = `Progress: ${p.toFixed(1)}%`;
+          });
+
+          elements.compileStatus.textContent = 'Uploading to storage...';
+          const filename = markerFile.name.replace(/\.[^/.]+$/, '') + '.mind';
+          const fileForUpload = new File([buffer], filename, { type: 'application/octet-stream' });
+          const timestamp = Date.now();
+          const mindPath = `minds/${timestamp}-${filename}`;
+          
+          const { error: mindErr } = await supabase.storage
+            .from('assets')
+            .upload(mindPath, fileForUpload);
+          
+          if (mindErr) throw mindErr;
+
+          uploadedMindUrl = supabase.storage
+            .from('assets')
+            .getPublicUrl(mindPath)
+            .data
+            .publicUrl;
+          
+          elements.compileStatus.textContent = '✅ Ready to upload!';
+          showStatus('Compilation complete!', false);
+        } catch (err) {
+          console.error('Compilation failed:', err);
+          elements.compileStatus.textContent = `❌ Failed: ${err.message}`;
+          showStatus('Compilation failed: ' + err.message, true);
+        }
+      });
+
+      document.getElementById('upload').addEventListener('click', async () => {
+        const name = document.getElementById('name').value.trim();
+        const video = document.getElementById('videoFile').files[0];
+        const markerFile = document.getElementById('markerFile').files[0];
+
+        if (!name || (!uploadedMindUrl && !markerFile) || !video) {
+          showStatus('Please fill all required fields', true);
+          return;
+        }
+
+        try {
+          showStatus('Uploading...', false, false);
+          const timestamp = Date.now();
+          const videoPath = `videos/${timestamp}-${video.name}`;
+
+          // Handle new marker image if needed
+          if (!uploadedMindUrl && markerFile) {
+            showStatus('Compiling marker...', false, false);
+            const buffer = await compileImageClient(markerFile, (p) => {
+              elements.compileStatus.textContent = `Progress: ${p.toFixed(1)}%`;
+            });
+
+            const filename = markerFile.name.replace(/\.[^/.]+$/, '') + '.mind';
+            const fileForUpload = new File([buffer], filename, { type: 'application/octet-stream' });
+            const mindPath = `minds/${timestamp}-${filename}`;
+            
+            const { error: mindErr } = await supabase.storage
+              .from('assets')
+              .upload(mindPath, fileForUpload);
+            
+            if (mindErr) throw new Error('Mind file upload failed: ' + mindErr.message);
+
+            uploadedMindUrl = supabase.storage
+              .from('assets')
+              .getPublicUrl(mindPath)
+              .data
+              .publicUrl;
+          }
+
+          // Upload video
+          const { error: videoErr } = await supabase.storage
+            .from('assets')
+            .upload(videoPath, video);
+          
+          if (videoErr) throw new Error('Video upload failed: ' + videoErr.message);
+
+          const videoUrl = supabase.storage
+            .from('assets')
+            .getPublicUrl(videoPath)
+            .data
+            .publicUrl;
+
+          // Create database record
+          const { error: dbErr } = await insertTarget(name, uploadedMindUrl, videoUrl);
+          if (dbErr) throw new Error('Database insert failed: ' + dbErr.message);
+
+          // Reset form
+          document.getElementById('name').value = '';
+          document.getElementById('videoFile').value = '';
+          document.getElementById('markerFile').value = '';
+          elements.compileStatus.textContent = '';
+          uploadedMindUrl = null;
+
+          showStatus('Upload complete!', false);
+          loadTargets();
+        } catch (err) {
+          console.error('Upload failed:', err);
+          showStatus('Upload failed: ' + err.message, true);
+        }
+      });
+
+      // Target actions (exposed to global scope for onclick handlers)
+      window.setActive = async (targetId) => {
+        try {
+          showStatus('Updating active target...', false, false);
+          
+          await supabase
+            .from('targets')
+            .update({ is_active: false })
+            .neq('id', targetId);
+          
+          const { error } = await supabase
+            .from('targets')
+            .update({ is_active: true })
+            .eq('id', targetId);
+          
+          if (error) throw error;
+          
+          showStatus('Target activated!');
+          loadTargets();
+        } catch (err) {
+          console.error('Set active failed:', err);
+          showStatus('Failed to set active: ' + err.message, true);
+        }
       };
 
       window.editVideo = async (id, name) => {
-        const input = document.createElement("input");
-        input.type = "file";
-        input.accept = "video/mp4";
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.accept = 'video/mp4';
         input.click();
 
         input.onchange = async () => {
           const file = input.files[0];
           if (!file) return;
-          statusEl.textContent = "⏳ Uploading new video...";
-          const timestamp = Date.now();
-          const videoPath = `videos/${timestamp}-${file.name}`;
 
-          const { error: vidErr } = await supabase.storage.from("assets").upload(videoPath, file);
-          if (vidErr) return (statusEl.textContent = "❌ Upload failed: " + vidErr.message);
+          try {
+            showStatus('Uploading new video...', false, false);
+            const timestamp = Date.now();
+            const videoPath = `videos/${timestamp}-${file.name}`;
 
-          const videoUrl = supabase.storage.from("assets").getPublicUrl(videoPath).data.publicUrl;
-          const { error: updateErr } = await supabase.from("targets").update({ videoUrl }).eq("id", id);
-          statusEl.textContent = updateErr ? "❌ Update failed: " + updateErr.message : "✅ Video updated!";
-          loadTargets();
+            const { error: uploadErr } = await supabase.storage
+              .from('assets')
+              .upload(videoPath, file);
+            
+            if (uploadErr) throw uploadErr;
+
+            const videoUrl = supabase.storage
+              .from('assets')
+              .getPublicUrl(videoPath)
+              .data
+              .publicUrl;
+
+            const { error: updateErr } = await supabase
+              .from('targets')
+              .update({ videoUrl })
+              .eq('id', id);
+            
+            if (updateErr) throw updateErr;
+
+            showStatus('Video updated!');
+            loadTargets();
+          } catch (err) {
+            console.error('Video update failed:', err);
+            showStatus('Failed to update video: ' + err.message, true);
+          }
         };
       };
 
       window.deleteTarget = async (id, name, mindUrl, videoUrl) => {
-        const confirm1 = confirm(`⚠️ Are you sure you want to delete "${name}"?`);
-        if (!confirm1) return;
-        const confirm2 = prompt('Type "delete" to confirm this action:');
-        if (confirm2?.toLowerCase() !== "delete") return alert("❌ Deletion cancelled.");
+        if (!confirm(`Are you sure you want to delete "${name}"?`)) return;
+        const confirmText = prompt('Type "delete" to confirm:');
+        if (confirmText?.toLowerCase() !== 'delete') {
+          showStatus('Deletion cancelled', false);
+          return;
+        }
 
-        statusEl.textContent = "⏳ Deleting target...";
-        const { error: delErr } = await supabase.from("targets").delete().eq("id", id);
-        if (delErr) return (statusEl.textContent = "❌ Failed: " + delErr.message);
+        try {
+          showStatus('Deleting target...', false, false);
 
-        const mindPath = mindUrl.split("/").slice(-2).join("/");
-        const videoPath = videoUrl.split("/").slice(-2).join("/");
-        await supabase.storage.from("assets").remove([mindPath, videoPath]);
-        statusEl.textContent = "✅ Target deleted successfully!";
-        loadTargets();
+          // Delete database record first
+          const { error: dbErr } = await supabase
+            .from('targets')
+            .delete()
+            .eq('id', id);
+          
+          if (dbErr) throw dbErr;
+
+          // Then clean up storage files
+          const mindPath = mindUrl.split('/').slice(-2).join('/');
+          const videoPath = videoUrl.split('/').slice(-2).join('/');
+          await supabase.storage
+            .from('assets')
+            .remove([mindPath, videoPath]);
+
+          showStatus('Target deleted!');
+          loadTargets();
+        } catch (err) {
+          console.error('Delete failed:', err);
+          showStatus('Failed to delete: ' + err.message, true);
+        }
       };
 
-  // loadTargets will be called after auth/profile selection
+      // Profile management
+      document.getElementById('newProfile').addEventListener('click', async () => {
+        if (!currentUser) {
+          showStatus('Not signed in', true);
+          return;
+        }
+
+        const name = prompt('Profile name (e.g., Marketing, Store A)');
+        if (!name) return;
+        
+        const brand = prompt('Brand name (optional)');
+        
+        try {
+          const { error } = await supabase
+            .from('profiles')
+            .insert([{
+              name,
+              brand: brand || null,
+              user_id: currentUser.id
+            }]);
+          
+          if (error) throw error;
+          
+          await loadProfiles();
+          showStatus('Profile created!');
+        } catch (e) {
+          console.error('Create profile failed:', e);
+          showStatus('Failed to create profile: ' + e.message, true);
+        }
+      });
+
+      // Admin functions
+      if (isAdmin) {
+        // Add invite brand user button
+        const inviteBtn = document.createElement('button');
+        inviteBtn.textContent = 'Invite Brand User';
+        inviteBtn.className = 'bg-yellow-500 text-white px-3 py-1 rounded text-sm hover:bg-yellow-600';
+        inviteBtn.onclick = async () => {
+          const email = prompt('Brand user email (required)');
+          if (!email) return;
+          
+          const name = prompt('User display name (optional)');
+          const brand = prompt('Assigned brand (required)');
+          if (!brand) {
+            showStatus('Brand is required', true);
+            return;
+          }
+
+          try {
+            const { error } = await supabase
+              .from('invitations')
+              .insert([{ email, name, brand }]);
+            
+            if (error) throw error;
+            
+            showStatus('Invitation created! Notify the user.');
+            await loadProfiles();
+          } catch (e) {
+            console.error('Invite failed:', e);
+            showStatus('Failed to create invitation: ' + e.message, true);
+          }
+        };
+        document.getElementById('newProfile').insertAdjacentElement('afterend', inviteBtn);
+
+        // Add generate admin invite button
+        const genInviteBtn = document.createElement('button');
+        genInviteBtn.textContent = 'Generate Admin Invite';
+        genInviteBtn.className = 'bg-blue-500 text-white px-3 py-1 rounded text-sm hover:bg-blue-600';
+        genInviteBtn.onclick = async () => {
+          const email = prompt('Email to associate (optional)');
+          try {
+            const { data, error } = await supabase.rpc(
+              'create_admin_token',
+              { p_email: email || null }
+            );
+            
+            if (error) throw error;
+            if (!data) throw new Error('No token returned');
+            
+            const link = window.location.origin + '/admin-register.html?token=' + encodeURIComponent(data);
+            await navigator.clipboard.writeText(link);
+            showStatus('Invite link copied to clipboard!');
+          } catch (e) {
+            console.error('Generate invite failed:', e);
+            showStatus('Failed to generate invite: ' + e.message, true);
+          }
+        };
+        inviteBtn.insertAdjacentElement('afterend', genInviteBtn);
+      }
+
+      // Sign out handler
+      document.getElementById('signOut').addEventListener('click', async () => {
+        await supabase.auth.signOut();
+        window.location.href = '/login.html';
+      });
+
+      // Initialize
+      await ensureAuth();
+      // Start with list view
+      elements.listTab.click();
     </script>
   </body>
 </html>
