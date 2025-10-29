@@ -227,8 +227,9 @@
   let uploadedMindUrl = null;
 
       // auth/admin + filters state
-      let currentUser = null;
-      let isAdmin = false;
+  let currentUser = null;
+  let isAdmin = false;
+  let currentUserBrand = null;
       const adminIds = new Set();
       const filters = { brand: "", clientId: "", uploader: "all" };
       const filterEls = {
@@ -279,6 +280,22 @@
           }
         } catch (e) {
           // ignore if no access; filters will remain hidden
+        }
+
+        // Determine user's brand (if any) from profiles
+        if (currentUser?.id) {
+          try {
+            const { data: prof } = await supabase
+              .from('profiles')
+              .select('brand')
+              .eq('user_id', currentUser.id)
+              .not('brand','is', null)
+              .limit(1)
+              .maybeSingle();
+            currentUserBrand = (prof && typeof prof.brand === 'string' && prof.brand.trim()) ? prof.brand.trim() : null;
+          } catch (e) {
+            currentUserBrand = null; // silently ignore if no access or table missing
+          }
         }
 
         // Load brand list for filter (dedup client-side)
@@ -436,6 +453,8 @@
             const { data: userData } = await supabase.auth.getUser();
             const insertObj = { name, mindurl: mindUrlLocal, videourl: videoUrlLocal, is_active: false };
             if (userData?.user?.id) insertObj.user_id = userData.user.id;
+            // tag brand uploads only for non-admin users that have a brand
+            if (!isAdmin && currentUserBrand) insertObj.brand = currentUserBrand;
             if (imageUrlLocal) insertObj.imageurl = imageUrlLocal;
             const { error: dbErr } = await supabase.from('targets').insert([insertObj]);
             if (dbErr) return (statusEl.textContent = "❌ Database insert failed: " + dbErr.message);
@@ -478,6 +497,7 @@
           const { data: userData } = await supabase.auth.getUser();
           const insertObj = { name, mindurl: uploadedMindUrl, videourl: videoUrl, is_active: false };
           if (userData?.user?.id) insertObj.user_id = userData.user.id;
+          if (!isAdmin && currentUserBrand) insertObj.brand = currentUserBrand;
           if (imageUrlNew) insertObj.imageurl = imageUrlNew;
 
           const { error: dbErr } = await supabase.from('targets').insert([insertObj]);
