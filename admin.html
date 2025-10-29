@@ -220,14 +220,28 @@
           document.getElementById('userMenu').textContent = currentUser.email;
           // determine role: check admins table for a row with this user_id
           try {
-            const { data: adminRows, error: adminErr } = await supabase.from('admins').select('id').eq('user_id', currentUser.id).limit(1);
-            if (!adminErr && adminRows && adminRows.length) {
+            console.log('Checking admin status for user:', currentUser.id);
+            const { data: adminRows, error: adminErr } = await supabase
+              .from('admins')
+              .select('user_id')
+              .eq('user_id', currentUser.id)
+              .maybeSingle();
+            
+            console.log('Admin check result:', { adminRows, adminErr });
+            
+            if (!adminErr && adminRows) {
               isAdmin = true;
+              console.log('✅ User is admin');
             } else {
               isAdmin = false;
+              console.log('❌ User is not admin:', adminErr?.message);
             }
+            
+            // Force admin true for debugging if needed
+            // isAdmin = true;
+            // console.log('⚠️ DEBUG: Forcing admin true');
           } catch (e) {
-            console.warn('Could not check admin role (admins table may be missing):', e.message || e);
+            console.warn('Could not check admin role:', e.message || e);
             isAdmin = false;
           }
           // Process any pending invitations for this user: if there is an invitation for their email,
@@ -575,18 +589,57 @@
       });
 
       async function loadTargets() {
-        let query = supabase.from("targets").select("*").order("created_at", { ascending: false });
-        if (activeProfile && activeProfile.brand) {
-          query = query.eq('brand', activeProfile.brand);
-        }
-        console.log('Loading targets...');
-        const { data, error } = await query;
-        if (error) {
-          console.error("Error loading targets:", error);
-          statusEl.textContent = "Error loading targets: " + error.message;
+        console.log('Loading targets... (isAdmin:', isAdmin, ', activeProfile:', activeProfile, ')');
+        
+        // Admins can see all targets, no profile selection needed
+        if (isAdmin) {
+          console.log('Admin user - fetching all targets');
+        } else if (!activeProfile) {
+          targetsTable.innerHTML = '<tr><td colspan="4" class="p-3 text-center text-gray-500">Please select a profile to view targets</td></tr>';
           return;
         }
-        console.log('Targets loaded:', data);
+
+        try {
+          const { data, error } = await supabase
+            .from("targets")
+            .select("*, profiles(brand)")  // Join with profiles to get brand info
+            .order("created_at", { ascending: false });
+
+          if (error) {
+            console.error("Error loading targets:", error);
+            statusEl.textContent = "Error loading targets: " + error.message;
+            return;
+          }
+
+          console.log('Targets loaded:', data);
+
+          if (!data || data.length === 0) {
+            targetsTable.innerHTML = '<tr><td colspan="4" class="p-3 text-center text-gray-500">No targets found</td></tr>';
+            return;
+          }
+
+          targetsTable.innerHTML = "";
+          data.forEach((t) => {
+            const isActive = t.is_active ? "✅" : "❌";
+            const activeClass = t.is_active ? "bg-green-50 border-l-4 border-green-500" : "";
+            const brandInfo = t.brand ? ` <span class="text-sm text-gray-500">(${t.brand})</span>` : '';
+            const row = `
+              <tr class="${activeClass}">
+                <td class="p-3">${t.name}${brandInfo}</td>
+                <td class="p-3 text-gray-500">${new Date(t.created_at).toLocaleString()}</td>
+                <td class="p-3">${isActive}</td>
+                <td class="p-3 text-center space-x-2">
+                  <button onclick="setActive('${t.id}')" class="px-3 py-1 rounded bg-blue-500 text-white hover:bg-blue-600">Set Active</button>
+                  <button onclick="editVideo('${t.id}', '${t.name}')" class="px-3 py-1 rounded bg-yellow-500 text-white hover:bg-yellow-600">Edit</button>
+                  <button onclick="deleteTarget('${t.id}', '${t.name}', '${t.mindUrl}', '${t.videoUrl}')" class="px-3 py-1 rounded bg-red-500 text-white hover:bg-red-600">Delete</button>
+                </td>
+              </tr>`;
+            targetsTable.innerHTML += row;
+          });
+        } catch (err) {
+          console.error("Error in loadTargets:", err);
+          statusEl.textContent = "Error loading targets: " + (err.message || err);
+        }
 
         targetsTable.innerHTML = "";
         if (!data || data.length === 0) {
