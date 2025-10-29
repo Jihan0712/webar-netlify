@@ -55,26 +55,39 @@
         if (msg) setTimeout(() => { alertEl.textContent = ''; }, 7000);
       }
 
+      // Load invite via a SECURITY DEFINER RPC to avoid RLS blocking anonymous reads.
+      // Run the SQL below in Supabase SQL editor to create the function if it's missing:
+      //
+      // CREATE OR REPLACE FUNCTION public.get_invitation_by_id(p_id uuid)
+      // RETURNS TABLE (id uuid, email text, name text, brand text, phone text, created_at timestamptz)
+      // LANGUAGE sql SECURITY DEFINER AS $$
+      //   SELECT id, email, name, brand, phone, created_at FROM public.invitations WHERE id = p_id;
+      // $$;
+      // GRANT EXECUTE ON FUNCTION public.get_invitation_by_id(uuid) TO public;
+      //
+      // This RPC returns the invitation even when RLS prevents anonymous direct selects.
       async function loadInvite(id) {
         if (!id) {
           inviteInfoEl.textContent = 'No invite specified. You must use the invite link sent by an admin.';
           return;
         }
         try {
-          const { data, error } = await supabase.from('invitations').select('*').eq('id', id).maybeSingle();
+          const { data, error } = await supabase.rpc('get_invitation_by_id', { p_id: id });
           if (error) {
-            console.error('invite fetch error', error);
+            console.error('invite rpc error', error);
             inviteInfoEl.textContent = 'Unable to load invitation.';
             return;
           }
-          if (!data) {
+          // RPC returns an array for set-returning functions; take first element if present
+          const row = Array.isArray(data) ? data[0] : data;
+          if (!row) {
             inviteInfoEl.textContent = 'Invitation not found or expired. Contact an admin.';
             return;
           }
-          inviteInfoEl.textContent = `Invited for brand: ${data.brand || '(not set)'} — please register with this email.`;
-          emailEl.value = data.email || '';
-          fullNameEl.value = data.name || '';
-          brandEl.value = data.brand || '';
+          inviteInfoEl.textContent = `Invited for brand: ${row.brand || '(not set)'} — please register with this email.`;
+          emailEl.value = row.email || '';
+          fullNameEl.value = row.name || '';
+          brandEl.value = row.brand || '';
         } catch (e) {
           console.error(e);
           inviteInfoEl.textContent = 'Unable to load invitation.';
