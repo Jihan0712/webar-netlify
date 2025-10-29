@@ -1,40 +1,33 @@
-</html>
 <!DOCTYPE html>
 <html lang="en">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
-    <title>INRL AR — Brand Register</title>
+    <title>INRL AR — Register (Client)</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   </head>
   <body class="min-h-screen bg-gray-100 flex items-center justify-center">
     <div class="w-full max-w-lg bg-white rounded shadow p-6">
-      <h1 class="text-2xl font-bold mb-4">INRL AR — Register as a Brand / Client</h1>
+      <h1 class="text-2xl font-bold mb-4">INRL AR — Register (Client)</h1>
 
       <div id="alert" class="text-sm text-red-600 mb-3"></div>
-
-      <label class="block text-sm">Full name</label>
-      <input id="fullName" type="text" class="w-full border rounded p-2 mb-3" placeholder="Your name" />
-
-      <label class="block text-sm">Company / Brand</label>
-      <input id="brand" type="text" class="w-full border rounded p-2 mb-3" placeholder="Company or brand name" />
 
       <label class="block text-sm">Email</label>
       <input id="email" type="email" class="w-full border rounded p-2 mb-3" placeholder="you@company.com" />
 
       <label class="block text-sm">Password</label>
-      <input id="password" type="password" class="w-full border rounded p-2 mb-3" placeholder="Create a password to use with login" />
+      <input id="password" type="password" class="w-full border rounded p-2 mb-3" placeholder="Create a password" />
 
-      <label class="block text-sm">Phone (optional)</label>
-      <input id="phone" type="tel" class="w-full border rounded p-2 mb-4" placeholder="Optional phone" />
+      <label class="block text-sm">Display name</label>
+      <input id="displayName" type="text" class="w-full border rounded p-2 mb-3" placeholder="Your full name" />
 
       <div class="flex gap-2 mb-2">
-        <button id="registerPw" class="flex-1 bg-blue-600 text-white rounded p-2">Register (email + password)</button>
-        <button id="request" class="flex-1 bg-gray-200 rounded p-2">Request account</button>
+        <button id="registerPw" class="flex-1 bg-blue-600 text-white rounded p-2">Register</button>
+        <a href="/brand-register.html" class="flex-1 inline-flex items-center justify-center bg-gray-200 rounded p-2">Brand registration (by invite)</a>
       </div>
 
-      <p class="text-xs text-gray-500">Register with an email and password to sign in via the login page. Use Request account to ask an admin to approve your brand account (will insert into `invitations`).</p>
+      <p class="text-xs text-gray-500">Use this form to register as a regular client. Brand signups require an admin invite — use the Brand registration link for invited brands.</p>
     </div>
 
     <script>
@@ -42,13 +35,10 @@
       const SUPABASE_ANON_KEY = "sb_publishable_yB6MBOTVLquZgR4X6yqhTQ_0wBFkhrZ";
       const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-  const fullNameEl = document.getElementById('fullName');
-  const brandEl = document.getElementById('brand');
-  const emailEl = document.getElementById('email');
-  const passwordEl = document.getElementById('password');
-  const phoneEl = document.getElementById('phone');
-  const registerPwBtn = document.getElementById('registerPw');
-      const requestBtn = document.getElementById('request');
+      const emailEl = document.getElementById('email');
+      const passwordEl = document.getElementById('password');
+      const displayNameEl = document.getElementById('displayName');
+      const registerPwBtn = document.getElementById('registerPw');
       const alertEl = document.getElementById('alert');
 
       function showAlert(msg, isError = true) {
@@ -59,69 +49,39 @@
 
       registerPwBtn.addEventListener('click', async () => {
         const email = (emailEl.value || '').trim().toLowerCase();
-        const password = (document.getElementById('password').value || '').trim();
-        if (!email || !password) return showAlert('Please provide both email and password to register.');
+        const password = (passwordEl.value || '').trim();
+        const displayName = (displayNameEl.value || '').trim() || null;
+        if (!email || !password) return showAlert('Please provide email and password to register.');
         try {
+          // first try signUp with redirect to admin page (ok if redirects are allowed). We also handle fallback.
           const redirect = window.location.origin + '/admin.html';
-          // sign up with email + password; Supabase will send confirmation / enable immediate sign-in depending on project settings
-          // Use the correct signature: signUp(credentials, { emailRedirectTo })
           const res = await supabase.auth.signUp({ email, password }, { emailRedirectTo: redirect });
           console.log('signUp response:', res);
           const { data, error } = res;
           if (error) {
-            // Show full error JSON so it's easy to debug (also log to console)
             console.error('signUp error object:', error);
-            // Try one fallback attempt without redirect (helps if redirect URL isn't allowed)
-            try {
-              const retry = await supabase.auth.signUp({ email, password });
-              console.log('signUp retry response (no redirect):', retry);
-              if (retry.error) {
-                return showAlert(retry.error.message || JSON.stringify(retry.error));
-              }
-              // retry succeeded
-              showAlert('Registration successful (no redirect). You can now log in with your email and password.', false);
-              if (passwordEl) passwordEl.value = '';
-              return;
-            } catch (rerr) {
-              console.error('Retry signUp failed:', rerr);
-            }
-            return showAlert(error.message || JSON.stringify(error));
+            // try fallback without redirect
+            const retry = await supabase.auth.signUp({ email, password });
+            console.log('signUp retry:', retry);
+            if (retry.error) return showAlert(retry.error.message || JSON.stringify(retry.error));
+            showAlert('Registration successful (no redirect). Check your email if confirmation is required.', false);
+            if (passwordEl) passwordEl.value = '';
+            return;
           }
-          // If email confirmations are enabled, user may need to confirm via email. Inform the user accordingly.
+
           if (data?.user) {
+            // attempt to create a profile row immediately (may require RLS settings)
+            try {
+              await supabase.from('profiles').insert([{ user_id: data.user.id, name: displayName }]);
+            } catch (e) { console.warn('profile insert failed', e); }
             showAlert('Registration successful. You can now log in with your email and password.', false);
+            if (passwordEl) passwordEl.value = '';
           } else {
             showAlert('Registration request sent — check your email for confirmation or sign-in link.', false);
           }
-          // clear sensitive fields
-          if (passwordEl) passwordEl.value = '';
         } catch (e) {
           console.error(e);
           showAlert(e?.message || String(e));
-        }
-      });
-
-      // Request account — inserts into invitations for admin to review
-      requestBtn.addEventListener('click', async () => {
-        const email = (emailEl.value || '').trim().toLowerCase();
-        const name = (fullNameEl.value || '').trim() || null;
-        const brand = (brandEl.value || '').trim() || null;
-        const phone = (phoneEl.value || '').trim() || null;
-        if (!email || !brand) return showAlert('Please provide at least email and brand name for a request.');
-        try {
-          const { data, error } = await supabase.from('invitations').insert([{ email, name, brand, phone }]).select();
-          if (error) {
-            console.error('Invitation insert failed', error);
-            return showAlert('Unable to submit request automatically. Ensure migrations are applied or contact an admin.');
-          }
-          showAlert('Request submitted. An admin will review and approve your account.', false);
-          fullNameEl.value = '';
-          brandEl.value = '';
-          emailEl.value = '';
-          phoneEl.value = '';
-        } catch (e) {
-          console.error(e);
-          showAlert('Request failed: ' + (e?.message || String(e)));
         }
       });
     </script>
