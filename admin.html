@@ -347,9 +347,11 @@
               console.warn('Image upload threw', e);
             }
 
-            // insert DB record (include imageUrl if available)
-            const insertObj = { name, mindUrl: mindUrlLocal, videoUrl: videoUrlLocal, is_active: false };
-            if (imageUrlLocal) insertObj.imageUrl = imageUrlLocal;
+            // insert DB record (include imageurl if available)
+            const { data: userData } = await supabase.auth.getUser();
+            const insertObj = { name, mindurl: mindUrlLocal, videourl: videoUrlLocal, is_active: false };
+            if (userData?.user?.id) insertObj.user_id = userData.user.id;
+            if (imageUrlLocal) insertObj.imageurl = imageUrlLocal;
             const { error: dbErr } = await supabase.from('targets').insert([insertObj]);
             if (dbErr) return (statusEl.textContent = "❌ Database insert failed: " + dbErr.message);
 
@@ -388,8 +390,10 @@
             }
           }
 
-          const insertObj = { name, mindUrl: uploadedMindUrl, videoUrl, is_active: false };
-          if (imageUrlNew) insertObj.imageUrl = imageUrlNew;
+          const { data: userData } = await supabase.auth.getUser();
+          const insertObj = { name, mindurl: uploadedMindUrl, videourl: videoUrl, is_active: false };
+          if (userData?.user?.id) insertObj.user_id = userData.user.id;
+          if (imageUrlNew) insertObj.imageurl = imageUrlNew;
 
           const { error: dbErr } = await supabase.from('targets').insert([insertObj]);
           if (dbErr) return (statusEl.textContent = "❌ Database insert failed: " + dbErr.message);
@@ -419,12 +423,12 @@
 
           // iamge display
           const candidates = [];
-          if (t.imageUrl) candidates.push(t.imageUrl);
-          if (t.mindUrl) {
+          if (t.imageurl) candidates.push(t.imageurl);
+          if (t.mindurl) {
             try {
-              candidates.push(t.mindUrl.replace(/\.mind$/, '.jpg'));
-              candidates.push(t.mindUrl.replace(/\.mind$/, '.png'));
-              candidates.push(t.mindUrl.replace(/\/minds\//, '/markers/').replace(/\.mind$/, '.jpg'));
+              candidates.push(t.mindurl.replace(/\.mind$/, '.jpg'));
+              candidates.push(t.mindurl.replace(/\.mind$/, '.png'));
+              candidates.push(t.mindurl.replace(/\/minds\//, '/markers/').replace(/\.mind$/, '.jpg'));
             } catch (e) {
             }
           }
@@ -448,7 +452,7 @@
               <td class="p-3 text-center space-x-2">
                 <button onclick="setActive('${t.id}')" class="px-3 py-1 rounded bg-blue-500 text-white hover:bg-blue-600">Set Active</button>
                 <button onclick="editVideo('${t.id}', '${t.name}')" class="px-3 py-1 rounded bg-yellow-500 text-white hover:bg-yellow-600">Edit</button>
-                <button onclick="deleteTarget('${t.id}', '${t.name}', '${t.mindUrl}', '${t.videoUrl}')" class="px-3 py-1 rounded bg-red-500 text-white hover:bg-red-600">Delete</button>
+                <button onclick="deleteTarget('${t.id}', '${t.name}', '${t.mindurl}', '${t.videourl}')" class="px-3 py-1 rounded bg-red-500 text-white hover:bg-red-600">Delete</button>
               </td>
             </tr>`;
           targetsTable.innerHTML += row;
@@ -497,7 +501,7 @@
           if (vidErr) return (statusEl.textContent = "❌ Upload failed: " + vidErr.message);
 
           const videoUrl = supabase.storage.from("assets").getPublicUrl(videoPath).data.publicUrl;
-          const { error: updateErr } = await supabase.from("targets").update({ videoUrl }).eq("id", id);
+          const { error: updateErr } = await supabase.from("targets").update({ videourl: videoUrl }).eq("id", id);
           statusEl.textContent = updateErr ? "❌ Update failed: " + updateErr.message : "✅ Video updated!";
           loadTargets();
         };
