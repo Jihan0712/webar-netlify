@@ -74,7 +74,7 @@
         </section>
 
         <!-- List Section -->
-        <section id="listSection" class="hidden">
+        <section id="listSection">
           <h2 class="text-xl font-semibold mb-4">Existing Targets</h2>
           <div id="targetsList" class="bg-white shadow rounded-lg overflow-hidden">
             <table class="w-full text-left border-collapse">
@@ -579,10 +579,20 @@
         if (activeProfile && activeProfile.brand) {
           query = query.eq('brand', activeProfile.brand);
         }
+        console.log('Loading targets...');
         const { data, error } = await query;
-        if (error) return console.error("Error loading targets:", error);
+        if (error) {
+          console.error("Error loading targets:", error);
+          statusEl.textContent = "Error loading targets: " + error.message;
+          return;
+        }
+        console.log('Targets loaded:', data);
 
         targetsTable.innerHTML = "";
+        if (!data || data.length === 0) {
+          targetsTable.innerHTML = '<tr><td colspan="4" class="p-3 text-center text-gray-500">No targets found</td></tr>';
+          return;
+        }
         data.forEach((t) => {
           const isActive = t.is_active ? "✅" : "❌";
           const activeClass = t.is_active ? "bg-green-50 border-l-4 border-green-500" : "";
