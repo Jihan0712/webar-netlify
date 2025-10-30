@@ -80,8 +80,14 @@
         const activeTarget = await loadActiveTarget();
         if (!activeTarget) return;
 
-        const mindUrl = activeTarget.mindUrl;
-        const videoUrl = activeTarget.videoUrl;
+        // Use lowercase column names to match your targets schema
+        const mindUrl = activeTarget.mindurl;
+        const videoUrl = activeTarget.videourl;
+        if (!mindUrl || !videoUrl) {
+          console.error("Missing mindurl/videourl on active target:", activeTarget);
+          document.body.innerHTML = "<h2 style='text-align:center; color:red;'>❌ Active target is missing mindurl or videourl.</h2>";
+          return;
+        }
 
         const scene = document.querySelector("a-scene");
         const aframeVideoAsset = document.querySelector("#card");
